@@ -101,10 +101,16 @@
         <h3>Waypoints (x, y, t)</h3>
         
         <div class="btn-group">
+            <button id="loadBtn">Load from JSON</button>
+            <input type="file" id="loadFileInput" accept=".json" style="display: none;">
             <button id="addBtn">+ Add</button>
             <button id="removeBtn">- Remove</button>
             <button id="resetBtn">Reset</button>
-            <button id="clearNoiseBtn">Clear Noise</button>
+
+        </div>
+        <div class="param-group" style="margin-top: 10px; margin-bottom: 10px;">
+            <label>ε (bin width):</label>
+            <input type="number" id="epsilonInput" value="1" step="0.5" min="0.1" style="width: 60px;">
         </div>
 
         <div style="overflow-x: auto;">
@@ -116,12 +122,15 @@
                 </tbody>
             </table>
         </div>
-        <button onclick="generateNoiseTrajectory()">
-            Add Noise
-        </button>
-        <button onclick="saveToJSON()">
-            Save to JSON
-        </button>
+        <div class="btn-group">
+            <button onclick="generateNoiseTrajectory()">
+                Add Noise
+            </button>
+            <button id="clearNoiseBtn">Clear Noise</button>
+            <button onclick="saveToJSON()">
+                Save to JSON
+            </button>
+        </div>
         <div class="status" id="statusMsg">
             ● Add waypoints
         </div>
@@ -140,6 +149,7 @@
 <script>
     let waypoint_list = [];  // Index 0 = ground truth, rest = noisy trajectories
     let noisyTrajectories = [];  // Store noisy trajectories separately
+    let EPS_BIN = 1;
 
     const canvas = document.getElementById('trajCanvas');
     const ctx = canvas.getContext('2d');
@@ -240,12 +250,15 @@
         document.getElementById('statusMsg').innerHTML = `● ${waypoint_list[0].length} waypoint(s) | Noise cleared`;
     }
 
+    // Gaussian Random Noise
     function gaussianRandom(mean=0, stdev=1) {
         const u = 1 - Math.random();
         const v = Math.random();
         const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
         return z * stdev + mean;
     }
+
+    // Uniform Noise
 
     function generateNoiseTrajectory(maxNoiseTraj=5, noiseMean=0, noiseStd=30) {
         noisyTrajectories = [];
@@ -339,6 +352,68 @@
         ctx.lineTo(canvas.width/2, canvas.height);
         ctx.stroke();
         
+        // ========== DRAW EPSILON BINS (Blue dashed vertical lines) ==========
+        const waypoints = waypoint_list[0];
+        if (waypoints && waypoints.length >= 2) {
+            const t0 = waypoints[0].t;
+            const tk = waypoints[waypoints.length - 1].t;
+            const epsilon = EPS_BIN;  // Use your epsilon value (e.g., 1)
+            
+            // Draw vertical dashed lines for each bin boundary
+            ctx.beginPath();
+            ctx.strokeStyle = '#3366ff';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([8, 6]);  // Dashed line pattern
+            
+            for (let t = t0; t <= tk; t += epsilon) {
+                // Find x position on canvas for this time
+                // Interpolate time to x position based on ground truth trajectory
+                let xPos = null;
+                
+                // Find which segment this time falls into
+                for (let i = 0; i < waypoints.length - 1; i++) {
+                    const wp1 = waypoints[i];
+                    const wp2 = waypoints[i + 1];
+                    
+                    if (t >= wp1.t && t <= wp2.t) {
+                        // Linear interpolation to find x at time t
+                        const frac = (t - wp1.t) / (wp2.t - wp1.t);
+                        xPos = wp1.x + frac * (wp2.x - wp1.x);
+                        break;
+                    }
+                }
+                
+                if (xPos !== null) {
+                    ctx.moveTo(xPos, 0);
+                    ctx.lineTo(xPos, canvas.height);
+                    ctx.stroke();
+                }
+            }
+            
+            // Draw bin center markers (optional - small circles on the line)
+            ctx.setLineDash([]);  // Reset to solid
+            ctx.fillStyle = '#3366ff';
+            ctx.globalAlpha = 0.5;
+            for (let t = t0 + epsilon/2; t <= tk; t += epsilon) {
+                let xPos = null;
+                for (let i = 0; i < waypoints.length - 1; i++) {
+                    const wp1 = waypoints[i];
+                    const wp2 = waypoints[i + 1];
+                    if (t >= wp1.t && t <= wp2.t) {
+                        const frac = (t - wp1.t) / (wp2.t - wp1.t);
+                        xPos = wp1.x + frac * (wp2.x - wp1.x);
+                        break;
+                    }
+                }
+                if (xPos !== null) {
+                    ctx.beginPath();
+                    ctx.arc(xPos, canvas.height/2, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            ctx.globalAlpha = 1.0;
+        }
+        
         // Draw noisy trajectories (red, semi-transparent)
         for (let t = 0; t < noisyTrajectories.length; t++) {
             const traj = noisyTrajectories[t];
@@ -359,11 +434,10 @@
         ctx.globalAlpha = 1.0;
         
         // Draw ground truth trajectory (blue)
-        const waypoints = waypoint_list[0];
         if (waypoints && waypoints.length >= 2) {
             ctx.beginPath();
             ctx.strokeStyle = '#3366ff';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 3;
             ctx.moveTo(waypoints[0].x, waypoints[0].y);
             for (let i = 1; i < waypoints.length; i++) {
                 ctx.lineTo(waypoints[i].x, waypoints[i].y);
@@ -373,33 +447,109 @@
             }
         }
         
+        // Draw ground truth waypoints - BOLD VERTICES
         if (waypoints) {
             for (let i = 0; i < waypoints.length; i++) {
                 ctx.beginPath();
-                ctx.arc(waypoints[i].x, waypoints[i].y, 5, 0, 2 * Math.PI);
+                ctx.arc(waypoints[i].x, waypoints[i].y, 8, 0, 2 * Math.PI);
                 ctx.fillStyle = '#3366ff';
                 ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(waypoints[i].x, waypoints[i].y, 5, 0, 2 * Math.PI);
                 ctx.fillStyle = 'white';
-                ctx.font = 'bold 10px monospace';
-                ctx.fillText(i, waypoints[i].x - 3, waypoints[i].y - 4);
+                ctx.fill();
+                
+                ctx.fillStyle = '#3366ff';
+                ctx.font = 'bold 14px monospace';
+                ctx.fillText(i, waypoints[i].x - 4, waypoints[i].y - 6);
             }
         }
         
+        // Draw noisy waypoints (small red dots)
         for (let t = 0; t < noisyTrajectories.length; t++) {
             const traj = noisyTrajectories[t];
-            for (let i = 1; i < traj.length - 1; i++) {  // skip start and end
+            for (let i = 1; i < traj.length - 1; i++) {
                 ctx.beginPath();
-                ctx.arc(traj[i].x, traj[i].y, 2, 0, 2 * Math.PI);
+                ctx.arc(traj[i].x, traj[i].y, 3, 0, 2 * Math.PI);
                 ctx.fillStyle = '#ff6666';
                 ctx.fill();
             }
         }
+        
+        // Reset line dash
+        ctx.setLineDash([]);
+    }
+
+    function updateEpsilon() {
+        EPS_BIN = parseFloat(document.getElementById('epsilonInput').value);
+        drawCanvas();
+    }
+    function loadFromJSON() {
+        document.getElementById('loadFileInput').click();
+    }
+
+    function handleFileLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                
+                // Clear existing data
+                waypoint_list = [];
+                noisyTrajectories = [];
+                
+                // Load ground truth
+                if (data.ground_truth) {
+                    waypoint_list.push(data.ground_truth);
+                } else if (data.waypoints) {
+                    // Handle older format
+                    waypoint_list.push(data.waypoints);
+                } else {
+                    alert("No valid trajectory data found in JSON");
+                    return;
+                }
+                
+                // Load noisy trajectories if present
+                if (data.noisy_trajectories && Array.isArray(data.noisy_trajectories)) {
+                    for (let traj of data.noisy_trajectories) {
+                        waypoint_list.push(traj);
+                        noisyTrajectories.push(traj);
+                    }
+                }
+                
+                // Update UI
+                renderTable();
+                drawCanvas();
+                
+                document.getElementById('statusMsg').innerHTML = `● Loaded: ${waypoint_list[0].length} waypoints | ${noisyTrajectories.length} noisy traj(s)`;
+                
+            } catch (err) {
+                alert("Error parsing JSON file: " + err.message);
+            }
+        };
+        
+        reader.onerror = function() {
+            alert("Error reading file");
+        };
+        
+        reader.readAsText(file);
+        
+        // Clear the input so the same file can be loaded again
+        event.target.value = '';
     }
 
     document.getElementById('addBtn').onclick = addWaypoint;
     document.getElementById('removeBtn').onclick = removeLast;
     document.getElementById('resetBtn').onclick = resetAll;
     document.getElementById('clearNoiseBtn').onclick = clearNoise;
+    document.getElementById('epsilonInput').onchange = updateEpsilon;
+    document.getElementById('loadBtn').onclick = loadFromJSON;
+    document.getElementById('loadFileInput').onchange = handleFileLoad;
 
     initDefault();
 </script>
