@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trajectory Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: monospace;
+            background: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+        }
+
+        /* Left panel - 20% */
+        .input-panel {
+            width: 20%;
+            background: #f5f5f5;
+            border-right: 1px solid #ccc;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .input-panel h3 {
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        /* Right panel - 80% */
+        .viz-panel {
+            width: 80%;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+        }
+
+        canvas {
+            border: 1px solid #ccc;
+            background: white;
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-bottom: 15px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 4px;
+            text-align: center;
+        }
+
+        th {
+            background: #e0e0e0;
+        }
+
+        input {
+            width: 60px;
+            padding: 2px;
+            font-size: 11px;
+            text-align: center;
+        }
+
+        button {
+            padding: 4px 8px;
+            font-size: 11px;
+            margin: 2px;
+            cursor: pointer;
+        }
+
+        .status {
+            font-size: 11px;
+            margin-top: 10px;
+            color: #333;
+        }
+
+        .btn-group {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Left: Input Panel (20%) -->
+    <div class="input-panel">
+        <h3>Waypoints (x, y, t)</h3>
+        
+        <div class="btn-group">
+            <button id="addBtn">+ Add</button>
+            <button id="removeBtn">- Remove</button>
+            <button id="resetBtn">Reset</button>
+            <button id="clearNoiseBtn">Clear Noise</button>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table id="waypointTable">
+                <thead>
+                    <tr><th>#</th><th>x</th><th>y</th><th>t</th></tr>
+                </thead>
+                <tbody id="tableBody">
+                </tbody>
+            </table>
+        </div>
+        <button onclick="generateNoiseTrajectory()">
+            Add Noise
+        </button>
+        <button onclick="saveToJSON()">
+            Save to JSON
+        </button>
+        <div class="status" id="statusMsg">
+            ● Add waypoints
+        </div>
+    </div>
+
+    <!-- Right: Visualization Panel (80%) -->
+    <div class="viz-panel">
+        <canvas id="trajCanvas" width="2000" height="1400" style="width:100%; height:auto; max-width:1200px; background:white;"></canvas>
+        <div style="font-size:11px; margin-top:8px;">
+            <span style="color:#3366ff;">● Ground Truth (blue)</span> &nbsp;&nbsp;
+            <span style="color:#ff3333;">● Noisy Trajectories (red)</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    let waypoint_list = [];  // Index 0 = ground truth, rest = noisy trajectories
+    let noisyTrajectories = [];  // Store noisy trajectories separately
+
+    const canvas = document.getElementById('trajCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Default waypoints
+    function initDefault() {
+        waypoint_list = [];
+        noisyTrajectories = [];
+        waypoint_list.push([
+            { x: 100, y: 400, t: 0 },
+            { x: 350, y: 250, t: 5 },
+            { x: 600, y: 380, t: 10 }
+        ]);
+        renderTable();
+        drawCanvas();
+    }
+
+    // Renders the ground truth trajectory
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        const waypoints = waypoint_list[0];
+        if (!waypoints) return;
+        
+        for (let i = 0; i < waypoints.length; i++) {
+            const wp = waypoints[i];
+            const row = tbody.insertRow();
+            
+            row.insertCell(0).innerText = i;
+            
+            const xCell = row.insertCell(1);
+            const xInput = document.createElement('input');
+            xInput.type = 'number';
+            xInput.value = wp.x;
+            xInput.step = 'any';
+            xInput.onchange = ((idx) => (e) => {
+                waypoints[idx].x = parseFloat(e.target.value);
+                drawCanvas();
+            })(i);
+            xCell.appendChild(xInput);
+            
+            const yCell = row.insertCell(2);
+            const yInput = document.createElement('input');
+            yInput.type = 'number';
+            yInput.value = wp.y;
+            yInput.step = 'any';
+            yInput.onchange = ((idx) => (e) => {
+                waypoints[idx].y = parseFloat(e.target.value);
+                drawCanvas();
+            })(i);
+            yCell.appendChild(yInput);
+            
+            const tCell = row.insertCell(3);
+            const tInput = document.createElement('input');
+            tInput.type = 'number';
+            tInput.value = wp.t;
+            tInput.step = 'any';
+            tInput.onchange = ((idx) => (e) => {
+                waypoints[idx].t = parseFloat(e.target.value);
+                drawCanvas();
+            })(i);
+            tCell.appendChild(tInput);
+        }
+        
+        document.getElementById('statusMsg').innerHTML = `● ${waypoints.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s)`;
+        drawCanvas();
+    }
+
+    function addWaypoint() {
+        const waypoints = waypoint_list[0];
+        let last = waypoints[waypoints.length - 1];
+        let newX = last ? last.x + 50 : 100;
+        let newY = last ? last.y : 300;
+        let newT = last ? last.t + 3 : 0;
+        waypoints.push({ x: newX, y: newY, t: newT });
+        renderTable();
+    }
+
+    function removeLast() {
+        const waypoints = waypoint_list[0];
+        if (waypoints.length > 1) waypoints.pop();
+        else if (waypoints.length === 1) waypoints = [];
+        renderTable();
+    }
+
+    function resetAll() {
+        initDefault();
+    }
+
+    function clearNoise() {
+        // Keep only ground truth (index 0)
+        while (waypoint_list.length > 1) {
+            waypoint_list.pop();
+        }
+        noisyTrajectories = [];
+        renderTable();
+        drawCanvas();
+        document.getElementById('statusMsg').innerHTML = `● ${waypoint_list[0].length} waypoint(s) | Noise cleared`;
+    }
+
+    function gaussianRandom(mean=0, stdev=1) {
+        const u = 1 - Math.random();
+        const v = Math.random();
+        const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        return z * stdev + mean;
+    }
+
+    function generateNoiseTrajectory(maxNoiseTraj=5, noiseMean=0, noiseStd=30) {
+        noisyTrajectories = [];
+        const numNoiseTraj = Math.floor(Math.random() * maxNoiseTraj) + 1;
+        const baseTraj = waypoint_list[0];
+        
+        for (let i = 0; i < numNoiseTraj; i++) {
+            const newTraj = [];
+            
+            for (let pt = 0; pt < baseTraj.length; pt++) {
+                const cp = baseTraj[pt];
+                
+                // Keep start and end points fixed
+                if (pt === 0 || pt === baseTraj.length - 1) {
+                    newTraj.push({ x: cp.x, y: cp.y, t: cp.t });
+                } else {
+                    const noisyX = cp.x + gaussianRandom(noiseMean, noiseStd);
+                    const noisyY = cp.y + gaussianRandom(noiseMean, noiseStd);
+                    const noisyT = cp.t + gaussianRandom(noiseMean, 0.5);
+                    
+                    newTraj.push({ 
+                        x: noisyX, 
+                        y: noisyY, 
+                        t: noisyT
+                    });
+                }
+            }
+            
+            // Sort by time
+            newTraj.sort((a, b) => a.t - b.t);
+            waypoint_list.push(newTraj);
+            noisyTrajectories.push(newTraj);
+        }
+        
+        renderTable();
+        drawCanvas();
+        document.getElementById('statusMsg').innerHTML = `● ${baseTraj.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s)`;
+    }
+
+    function saveToJSON() {
+        if (waypoint_list.length === 0 || waypoint_list[0].length === 0) {
+            alert("No waypoints to save.");
+            return;
+        }
+
+        const data = {
+            ground_truth: waypoint_list[0],
+            noisy_trajectories: noisyTrajectories,
+            num_noisy: noisyTrajectories.length,
+            timestamp: new Date().toISOString()
+        };
+
+        const jsonStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `trajectory.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function drawCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw grid
+        ctx.beginPath();
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 0.5;
+        for (let x = 0; x <= canvas.width; x += 50) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+        for (let y = 0; y <= canvas.height; y += 50) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+        
+        // Draw axes
+        ctx.beginPath();
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 1;
+        ctx.moveTo(0, canvas.height/2);
+        ctx.lineTo(canvas.width, canvas.height/2);
+        ctx.moveTo(canvas.width/2, 0);
+        ctx.lineTo(canvas.width/2, canvas.height);
+        ctx.stroke();
+        
+        // Draw noisy trajectories (red, semi-transparent)
+        for (let t = 0; t < noisyTrajectories.length; t++) {
+            const traj = noisyTrajectories[t];
+            if (traj.length >= 2) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#ff3333';
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.5;
+                ctx.moveTo(traj[0].x, traj[0].y);
+                for (let i = 1; i < traj.length; i++) {
+                    ctx.lineTo(traj[i].x, traj[i].y);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(traj[i].x, traj[i].y);
+                }
+            }
+        }
+        ctx.globalAlpha = 1.0;
+        
+        // Draw ground truth trajectory (blue)
+        const waypoints = waypoint_list[0];
+        if (waypoints && waypoints.length >= 2) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#3366ff';
+            ctx.lineWidth = 2.5;
+            ctx.moveTo(waypoints[0].x, waypoints[0].y);
+            for (let i = 1; i < waypoints.length; i++) {
+                ctx.lineTo(waypoints[i].x, waypoints[i].y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(waypoints[i].x, waypoints[i].y);
+            }
+        }
+        
+        if (waypoints) {
+            for (let i = 0; i < waypoints.length; i++) {
+                ctx.beginPath();
+                ctx.arc(waypoints[i].x, waypoints[i].y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = '#3366ff';
+                ctx.fill();
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 10px monospace';
+                ctx.fillText(i, waypoints[i].x - 3, waypoints[i].y - 4);
+            }
+        }
+        
+        for (let t = 0; t < noisyTrajectories.length; t++) {
+            const traj = noisyTrajectories[t];
+            for (let i = 1; i < traj.length - 1; i++) {  // skip start and end
+                ctx.beginPath();
+                ctx.arc(traj[i].x, traj[i].y, 2, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ff6666';
+                ctx.fill();
+            }
+        }
+    }
+
+    document.getElementById('addBtn').onclick = addWaypoint;
+    document.getElementById('removeBtn').onclick = removeLast;
+    document.getElementById('resetBtn').onclick = resetAll;
+    document.getElementById('clearNoiseBtn').onclick = clearNoise;
+
+    initDefault();
+</script>
+</body>
+</html>
