@@ -1,5 +1,6 @@
 import json
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 """
 Return gt_np with shape num_points x 3
@@ -28,14 +29,9 @@ def getData():
     return gt_np, noise_np
 
 """
-Relative Error/Absolute Error
-"""
-def metric(gt, pred):
-    return 0
-
-
-"""
 Interpolate the trajectory path using linear interpolation
+
+Returns [x,y,t] 
 """
 def lin_interpolation(traj, idx, t):
     EPS = 0.01
@@ -48,7 +44,6 @@ def lin_interpolation(traj, idx, t):
     x_1 = traj[idx+1][0]
     y_0 = traj[idx][1]
     y_1 = traj[idx+1][1]
-    print(t_0)
 
     assert t <= t_1 - EPS and t >= t_0 + EPS
 
@@ -58,7 +53,39 @@ def lin_interpolation(traj, idx, t):
     x_out = x_1 + m_x * (t - t_1)
     y_out = y_1 + m_y * (t - t_1)
     
-    return [x_out, y_out]
+    return [x_out, y_out, t]
+
+"""
+Create a data structure O(N) to enable 
+O(1) query for where interval does the bin belong to
+
+[[bin_start, bin_end, interval_start_idx, interval_end_idx]]
+"""
+def create_bins(traj, bin_size):
+    assert len(traj.shape) == 2
+    
+    bins = []
+   
+    for i in range(traj.shape[0]-1):
+        t_0 = traj[i][2]
+        t_1 = traj[i+1][2]
+        bin_range = np.arange(t_0, t_1, bin_size, dtype=np.float64)
+        bin_range = np.append(bin_range, t_1)
+        windows = sliding_window_view(bin_range, window_shape=2)
+        i_0 = np.ones((windows.shape[0], 1)) * i
+        i_1 = np.ones((windows.shape[0], 1)) * (i + 1)
+        stacked = np.hstack((windows, i_0, i_1))
+        bins.append(stacked)
+    
+    bins = np.vstack(bins)
+    return bins
+
+"""
+Relative Error/Absolute Error
+"""
+def metric(gt, pred):
+    return 0
+
     
 """
 Compute convex hull given a time bin
@@ -74,6 +101,7 @@ def computeGassianDist(pts, bin):
 
 
 gt, noise = getData()
-print(noise[0])
+print(gt)
 out = lin_interpolation(noise[0], 0, 4)
-print(out)
+a = create_bins(gt, 1)
+print(a)
