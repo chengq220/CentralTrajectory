@@ -103,10 +103,11 @@
         <div class="btn-group">
             <button id="loadBtn">Load from JSON</button>
             <input type="file" id="loadFileInput" accept=".json" style="display: none;">
+            <button id="uploadPredBtn">Upload Pred</button>
+            <input type="file" id="uploadPredInput" accept=".json" style="display: none;">
             <button id="addBtn">+ Add</button>
             <button id="removeBtn">- Remove</button>
             <button id="resetBtn">Reset</button>
-
         </div>
         <div class="param-group" style="margin-top: 10px; margin-bottom: 10px;">
             <label>ε (bin width):</label>
@@ -127,6 +128,7 @@
                 Add Noise
             </button>
             <button id="clearNoiseBtn">Clear Noise</button>
+            <button id="clearPredBtn">Clear Pred</button>
             <button onclick="saveToJSON()">
                 Save to JSON
             </button>
@@ -141,7 +143,8 @@
         <canvas id="trajCanvas" width="2000" height="1400" style="width:100%; height:auto; max-width:1200px; background:white;"></canvas>
         <div style="font-size:11px; margin-top:8px;">
             <span style="color:#3366ff;">● Ground Truth (blue)</span> &nbsp;&nbsp;
-            <span style="color:#ff3333;">● Noisy Trajectories (red)</span>
+            <span style="color:#ff3333;">● Noisy Trajectories (red)</span> &nbsp;&nbsp;
+            <span style="color:#33cc33;">● Prediction (green)</span>
         </div>
     </div>
 </div>
@@ -149,6 +152,7 @@
 <script>
     let waypoint_list = [];  // Index 0 = ground truth, rest = noisy trajectories
     let noisyTrajectories = [];  // Store noisy trajectories separately
+    let predictionTrajectory = null;  // Store prediction trajectory
     let EPS_BIN = 1;
 
     const canvas = document.getElementById('trajCanvas');
@@ -158,6 +162,7 @@
     function initDefault() {
         waypoint_list = [];
         noisyTrajectories = [];
+        predictionTrajectory = null;
         waypoint_list.push([
             { x: 100, y: 400, t: 0 },
             { x: 350, y: 250, t: 5 },
@@ -214,7 +219,7 @@
             tCell.appendChild(tInput);
         }
         
-        document.getElementById('statusMsg').innerHTML = `● ${waypoints.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s)`;
+        document.getElementById('statusMsg').innerHTML = `● ${waypoints.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s) | ${predictionTrajectory ? 'Pred loaded' : 'No pred'}`;
         drawCanvas();
     }
 
@@ -248,6 +253,13 @@
         renderTable();
         drawCanvas();
         document.getElementById('statusMsg').innerHTML = `● ${waypoint_list[0].length} waypoint(s) | Noise cleared`;
+    }
+
+    function clearPred() {
+        predictionTrajectory = null;
+        renderTable();
+        drawCanvas();
+        document.getElementById('statusMsg').innerHTML = `● ${waypoint_list[0].length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s) | Pred cleared`;
     }
 
     // Gaussian Random Noise
@@ -295,7 +307,7 @@
         
         renderTable();
         drawCanvas();
-        document.getElementById('statusMsg').innerHTML = `● ${baseTraj.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s)`;
+        document.getElementById('statusMsg').innerHTML = `● ${baseTraj.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s) | ${predictionTrajectory ? 'Pred loaded' : 'No pred'}`;
     }
 
     function saveToJSON() {
@@ -322,6 +334,77 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    function uploadPred() {
+        document.getElementById('uploadPredInput').click();
+    }
+
+    function handlePredLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                
+                // Handle different possible JSON formats
+                let predData = null;
+                
+                // Check for common formats
+                if (data.prediction) {
+                    predData = data.prediction;
+                } else if (data.ground_truth) {
+                    predData = data.ground_truth;
+                } else if (Array.isArray(data)) {
+                    predData = data;
+                } else if (data.data && Array.isArray(data.data)) {
+                    predData = data.data;
+                } else {
+                    // Try to find any array in the data
+                    for (let key in data) {
+                        if (Array.isArray(data[key]) && data[key].length > 0 && data[key][0].hasOwnProperty('x')) {
+                            predData = data[key];
+                            break;
+                        }
+                    }
+                }
+                
+                if (!predData || !Array.isArray(predData)) {
+                    alert("No valid prediction trajectory found in JSON. Expected format: {prediction: [{x, y, t}]} or [{x, y, t}]");
+                    return;
+                }
+                
+                // Convert to standard format
+                predictionTrajectory = predData.map(point => ({
+                    x: parseFloat(point.x),
+                    y: parseFloat(point.y),
+                    t: parseFloat(point.t)
+                }));
+                
+                // Sort by time
+                predictionTrajectory.sort((a, b) => a.t - b.t);
+                
+                renderTable();
+                drawCanvas();
+                
+                document.getElementById('statusMsg').innerHTML = `● Loaded pred: ${predictionTrajectory.length} points | ${noisyTrajectories.length} noisy traj(s)`;
+                
+            } catch (err) {
+                alert("Error parsing JSON file: " + err.message);
+            }
+        };
+        
+        reader.onerror = function() {
+            alert("Error reading file");
+        };
+        
+        reader.readAsText(file);
+        
+        // Clear the input so the same file can be loaded again
+        event.target.value = '';
     }
 
     function drawCanvas() {
@@ -431,6 +514,38 @@
                 }
             }
         }
+        
+        // Draw prediction trajectory (green)
+        if (predictionTrajectory && predictionTrajectory.length >= 2) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#33cc33';
+            ctx.lineWidth = 3;
+            ctx.globalAlpha = 0.8;
+            ctx.moveTo(predictionTrajectory[0].x, predictionTrajectory[0].y);
+            for (let i = 1; i < predictionTrajectory.length; i++) {
+                ctx.lineTo(predictionTrajectory[i].x, predictionTrajectory[i].y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(predictionTrajectory[i].x, predictionTrajectory[i].y);
+            }
+            
+            // Draw prediction waypoints
+            for (let i = 0; i < predictionTrajectory.length; i++) {
+                ctx.beginPath();
+                ctx.arc(predictionTrajectory[i].x, predictionTrajectory[i].y, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = '#33cc33';
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(predictionTrajectory[i].x, predictionTrajectory[i].y, 3, 0, 2 * Math.PI);
+                ctx.fillStyle = 'white';
+                ctx.fill();
+                
+                ctx.fillStyle = '#33cc33';
+                ctx.font = 'bold 12px monospace';
+                ctx.fillText(i, predictionTrajectory[i].x - 3, predictionTrajectory[i].y - 5);
+            }
+        }
         ctx.globalAlpha = 1.0;
         
         // Draw ground truth trajectory (blue)
@@ -485,6 +600,7 @@
         EPS_BIN = parseFloat(document.getElementById('epsilonInput').value);
         drawCanvas();
     }
+    
     function loadFromJSON() {
         document.getElementById('loadFileInput').click();
     }
@@ -526,7 +642,7 @@
                 renderTable();
                 drawCanvas();
                 
-                document.getElementById('statusMsg').innerHTML = `● Loaded: ${waypoint_list[0].length} waypoints | ${noisyTrajectories.length} noisy traj(s)`;
+                document.getElementById('statusMsg').innerHTML = `● Loaded: ${waypoint_list[0].length} waypoints | ${noisyTrajectories.length} noisy traj(s) | ${predictionTrajectory ? 'Pred loaded' : 'No pred'}`;
                 
             } catch (err) {
                 alert("Error parsing JSON file: " + err.message);
@@ -547,9 +663,12 @@
     document.getElementById('removeBtn').onclick = removeLast;
     document.getElementById('resetBtn').onclick = resetAll;
     document.getElementById('clearNoiseBtn').onclick = clearNoise;
+    document.getElementById('clearPredBtn').onclick = clearPred;
     document.getElementById('epsilonInput').onchange = updateEpsilon;
     document.getElementById('loadBtn').onclick = loadFromJSON;
     document.getElementById('loadFileInput').onchange = handleFileLoad;
+    document.getElementById('uploadPredBtn').onclick = uploadPred;
+    document.getElementById('uploadPredInput').onchange = handlePredLoad;
 
     initDefault();
 </script>
