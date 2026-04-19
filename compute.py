@@ -34,23 +34,24 @@ Interpolate the trajectory path using linear interpolation
 Returns [x, y, t] 
 """
 def lin_interpolation(t_0, t_1, x_0, x_1, y_0, y_1, t):
-    EPS = 0.01
+    EPS = 0.1
+    # print(t_0, t, t_1)
     assert t_1 > t_0
-    assert t <= t_1 - EPS and t >= t_0 + EPS
+    # to approximate t within the bin
+    t_alter = max(min(t, t_1 - EPS), t_0 + EPS)
 
     m_x = float((x_1 - x_0))/(t_1 - t_0)
     m_y = float((y_1 - y_0))/(t_1 - t_0)
 
-    x_out = x_1 + m_x * (t - t_1)
-    y_out = y_1 + m_y * (t - t_1)
-    
-    return [x_out, y_out, t]
+    x_out = x_1 + m_x * (t_alter - t_1)
+    y_out = y_1 + m_y * (t_alter - t_1)
 
+    return [x_out, y_out, t]
 """
 Create a data structure O(N) to enable 
 O(1) query for where interval does the bin belong to
 
-[[bin_start, bin_end, interval_start_idx, interval_end_idx]]
+[[bin_start_t, bin_end_t, interval_start_idx, interval_end_idx]]
 """
 def create_bins(traj, bin_size):
     assert len(traj.shape) == 2    
@@ -125,40 +126,48 @@ def ComputeGaussianTrajectory(path):
     gt_bins = create_bins(gt, 1)
     noise_bins = [create_bins(noise_traj[i], 1) for i in range(noise_traj.shape[0])]
     pred_traj = []
+    x,y,t = gt[0]
+    pred_traj.append([int(x), int(y), int(t)])
     for idx in range(gt_bins.shape[0]):
         count = 1
         x_avg, y_avg = 0, 0
         cur_noise_bins = [noise_bins[noise_idx][idx] for noise_idx in range(len(noise_bins))]
-        bin_start, bin_end, _, _ = gt_bins[idx]
-        print(bin_start, bin_end)
-        print(gt[4], gt[bin_end])
-        print("===============================")
+        bin_start, bin_end, int_start, int_end = gt_bins[idx]
         t = (bin_start + bin_end) / 2
-        gt_x0, gt_y0 = gt[bin_start][0], gt[bin_start][1]
-        gt_x1, gt_y1 = gt[bin_end][0], gt[bin_end][1]
-        interpolate_gt = lin_interpolation(bin_start, bin_end, gt_x0, gt_x1, gt_y0, gt_y1, t)
+        gt_x0, gt_y0 = gt[int_start][0], gt[int_start][1]
+        gt_x1, gt_y1 = gt[int_end][0], gt[int_end][1]
+        gt_t0, gt_t1 = gt[int_start][2], gt[int_end][2]
+        interpolate_gt = lin_interpolation(gt_t0, gt_t1, gt_x0, gt_x1, gt_y0, gt_y1, t)
         x_avg += interpolate_gt[0]
         y_avg += interpolate_gt[1]
-        for nt, noise_bin in enumerate(cur_noise_bins):
+        for nt in range(len(cur_noise_bins)):
             cur_noise = noise_traj[nt]
-            bin_start, bin_end, _, _ = noise_bin
-            noise_x0, noise_y0 = cur_noise[bin_start][0], cur_noise[bin_start][1]
-            noise_x1, noise_y1 = cur_noise[bin_end][0], cur_noise[bin_end][1]
-            interpolate_noise = lin_interpolation(bin_start, bin_end, noise_x0, noise_x1, noise_y0, noise_y1, t)
+            bin_start, bin_end, int_start, int_end = cur_noise_bins[nt]
+            noise_x0, noise_y0 = cur_noise[int_start][0], cur_noise[int_start][1]
+            noise_x1, noise_y1 = cur_noise[int_end][0], cur_noise[int_end][1]
+            noise_t0, noise_t1 = cur_noise[int_start][2], cur_noise[int_end][2]
+            interpolate_noise = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
             x_avg += interpolate_noise[0]
             y_avg += interpolate_noise[1]
             count += 1
         x_avg /= count
         y_avg /= count
         pred_traj.append([x_avg, y_avg, t])
+    x,y,t = gt[-1]
+    pred_traj.append([int(x), int(y), int(t)])
     return pred_traj
 
+def save_pred(pred, name="pred"):
+    pred_list = []
+    for x, y, t in pred:
+        pred_list.append({'x': x, 'y': y, 't': t})
+    output = {name: pred_list}
+    
+    filename = f"{name}.json"
+    with open(filename, 'w') as file:
+        json.dump(output, file, indent=2)
+
 if __name__ == "__main__":
-    ComputeGaussianTrajectory(path="trajectory.json")
-
-
-# gt, noise = getData()
-# print(gt)
-# out = lin_interpolation(noise[0], 0, 4)
-# a = create_bins(gt, 1)
-# print(a)
+    pred = ComputeGaussianTrajectory(path="trajectory.json")
+    print(pred)
+    save_pred(pred)
