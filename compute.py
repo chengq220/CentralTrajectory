@@ -1,6 +1,7 @@
 import json
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
+from scipy.spatial import ConvexHull, convex_hull_plot_2d
 
 """
 Return gt_np with shape num_points x 3
@@ -95,7 +96,7 @@ def metric(gt, pred):
 
     for (x_gt, y_gt, t_gt), (x_pred, y_pred, t_pred) in zip(gt, pred):
         # find the time interval that t_pred belongs to 
-
+        # TODO: need to finish
 
         interpolate_x, interpolate_y, t = lin_interpolation(t_0, t_1, x_0, x_1, y_0, y_1, t_pred)
 
@@ -113,17 +114,31 @@ def metric(gt, pred):
 
     
 """
-Compute convex hull given a time bin
+Compute convex hull given a time bin and the points belonging to the time bin
 """
-def computeConvexHull(pts, bin):
+def computeConvexHull(trajectories, bin_idx):
+    bin_start, bin_end, int_start, int_end = bin
+    # interpolate the points in the bin at 3 points, the two end points and the middle point
+    bin_pts = []
+    for traj in trajectories: 
+        
+    hull = ConvexHull(bin_pts)
+    return hull
+
+"""
+Compute the predicted trajectory given a convex hull assumption
+"""
+def computeConvexHullTrajectory(path, bin_size = 1):
+    gt, noise_traj = getData(path)
+    gt_bins = create_bins(gt, bin_size)
     return 0
 
 """
 Compute the predicted trajectory given a gaussian distribution assumption
 """
-def ComputeGaussianTrajectory(path):
+def ComputeGaussianTrajectory(path, bin_size = 1):
     gt, noise_traj = getData(path)
-    gt_bins = create_bins(gt, 1)
+    gt_bins = create_bins(gt, bin_size)
     noise_bins = [create_bins(noise_traj[i], 1) for i in range(noise_traj.shape[0])]
     pred_traj = []
     x,y,t = gt[0]
@@ -168,6 +183,6 @@ def save_pred(pred, name="pred"):
         json.dump(output, file, indent=2)
 
 if __name__ == "__main__":
-    pred = ComputeGaussianTrajectory(path="trajectory.json")
+    pred = ComputeGaussianTrajectory(path="example/trajectory.json")
     print(pred)
     save_pred(pred)
