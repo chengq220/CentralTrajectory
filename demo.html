@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trajectory Visualizer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Trajectory Editor: Click to Edit Waypoint</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            user-select: none;
         }
 
         body {
@@ -24,393 +25,336 @@
             height: 100vh;
         }
 
-        /* Left panel - 20% */
+        /* Left panel */
         .input-panel {
             width: 20%;
             background: #f5f5f5;
             border-right: 1px solid #ccc;
             padding: 15px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .input-panel h3 {
-            margin-bottom: 15px;
             font-size: 14px;
+            font-weight: bold;
         }
 
-        /* Right panel - 80% */
-        .viz-panel {
-            width: 80%;
-            display: flex;
-            flex-direction: column;
-            padding: 15px;
-        }
-
-        canvas {
-            border: 1px solid #ccc;
-            background: white;
-            display: block;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        .info-card {
+            background: #e9e9e9;
+            border-radius: 6px;
+            padding: 8px 10px;
             font-size: 12px;
-            margin-bottom: 15px;
-        }
-
-        th, td {
-            border: 1px solid #ccc;
-            padding: 4px;
-            text-align: center;
-        }
-
-        th {
-            background: #e0e0e0;
-        }
-
-        input {
-            width: 60px;
-            padding: 2px;
-            font-size: 11px;
-            text-align: center;
-        }
-
-        button {
-            padding: 4px 8px;
-            font-size: 11px;
-            margin: 2px;
-            cursor: pointer;
-        }
-
-        .status {
-            font-size: 11px;
-            margin-top: 10px;
-            color: #333;
+            border-left: 3px solid #3366ff;
         }
 
         .btn-group {
-            margin: 10px 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 5px 0;
+        }
+
+        button {
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            background: white;
+            border: 1px solid #aaa;
+            border-radius: 4px;
+            transition: 0.1s ease;
+        }
+        button:hover {
+            background: #e0e0e0;
+            transform: scale(0.97);
+        }
+        .param-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .param-group label {
+            font-size: 12px;
+            font-weight: bold;
+        }
+        input {
+            padding: 4px 6px;
+            font-size: 11px;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .status {
+            font-size: 11px;
+            background: #fff3cd;
+            padding: 8px;
+            border-radius: 6px;
+            color: #856404;
+        }
+        .legend {
+            font-size: 11px;
+            background: white;
+            padding: 6px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        .legend span {
+            display: inline-block;
+            margin-right: 12px;
+        }
+        hr {
+            margin: 5px 0;
+        }
+
+        /* MODAL STYLES */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            width: 320px;
+            max-width: 90%;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            font-family: monospace;
+            border: 1px solid #ccc;
+        }
+        .modal-content h3 {
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-left: 4px solid #3366ff;
+            padding-left: 10px;
+        }
+        .modal-field {
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .modal-field label {
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .modal-field input {
+            width: 100%;
+            padding: 8px;
+            font-size: 13px;
+            border: 1px solid #aaa;
+            border-radius: 6px;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-buttons button {
+            padding: 6px 14px;
+            font-size: 12px;
+        }
+        .delete-btn {
+            background-color: #ffebee;
+            border-color: #f44336;
+            color: #c62828;
+        }
+        .delete-btn:hover {
+            background-color: #ffcdd2;
+        }
+        .save-btn {
+            background-color: #e8f0fe;
+            border-color: #3366ff;
+            color: #1a3e8c;
+        }
+        .close-modal {
+            background: #eee;
+        }
+        .waypoint-badge {
+            display: inline-block;
+            background: #3366ff20;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 10px;
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <!-- Left: Input Panel (20%) -->
+    <!-- Left Panel -->
     <div class="input-panel">
-        <h3>Waypoints (x, y, t)</h3>
+        <h3>✏️ Click Waypoint to Edit</h3>
+        <div class="info-card">
+            🖱️ <strong>Click on any blue point</strong> → open editor<br>
+            ✏️ Change X, Y, Time or Delete point<br>
+            🧩 Keep at least 2 points for trajectory<br>
+            ⏱️ Times auto-sorted after edits
+        </div>
         
         <div class="btn-group">
-            <button id="loadBtn">Load from JSON</button>
+            <button id="loadBtn">📂 Load JSON</button>
             <input type="file" id="loadFileInput" accept=".json" style="display: none;">
-            <button id="uploadPredBtn">Upload Pred</button>
+            <button id="uploadPredBtn">📈 Upload Pred</button>
             <input type="file" id="uploadPredInput" accept=".json" style="display: none;">
-            <button id="addBtn">+ Add</button>
-            <button id="removeBtn">- Remove</button>
-            <button id="resetBtn">Reset</button>
-        </div>
-        <div class="param-group" style="margin-top: 10px; margin-bottom: 10px;">
-            <label>ε (bin width):</label>
-            <input type="number" id="epsilonInput" value="1" step="0.5" min="0.1" style="width: 60px;">
+            <button id="addBtn">➕ Add Point</button>
+            <button id="removeBtn">➖ Remove Last</button>
+            <button id="resetBtn">🔄 Reset</button>
         </div>
 
-        <div style="overflow-x: auto;">
-            <table id="waypointTable">
-                <thead>
-                    <tr><th>#</th><th>x</th><th>y</th><th>t</th></tr>
-                </thead>
-                <tbody id="tableBody">
-                </tbody>
-            </table>
+        <div class="param-group">
+            <label>ε (bin width):</label>
+            <input type="number" id="epsilonInput" value="1" step="0.5" min="0.1" style="width: 65px;">
         </div>
+
         <div class="btn-group">
-            <button onclick="generateNoiseTrajectory()">
-                Add Noise
-            </button>
-            <button id="clearNoiseBtn">Clear Noise</button>
-            <button id="clearPredBtn">Clear Pred</button>
-            <button onclick="saveToJSON()">
-                Save to JSON
-            </button>
+            <button id="noiseBtn">🎲 Add Random Noise</button>
+            <button id="clearNoiseBtn">🗑️ Clear Noise</button>
+            <button id="clearPredBtn">❌ Clear Pred</button>
+            <button id="saveBtn">💾 Save to JSON</button>
         </div>
+
         <div class="status" id="statusMsg">
-            ● Add waypoints
+            💡 Click on any blue waypoint to edit
+        </div>
+
+        <div class="legend">
+            <span style="color:#3366ff">● Ground Truth</span>
+            <span style="color:#ff3333">● Noisy Traj</span>
+            <span style="color:#33cc33">● Prediction</span>
+            <hr>
+            <span>📌 <strong>Waypoints:</strong> <span id="wpCount">0</span></span>
+            <span>🎲 <strong>Noise:</strong> <span id="noiseCount">0</span></span>
         </div>
     </div>
 
-    <!-- Right: Visualization Panel (80%) -->
-    <div class="viz-panel">
-        <canvas id="trajCanvas" width="2000" height="1400" style="width:100%; height:auto; max-width:1200px; background:white;"></canvas>
-        <div style="font-size:11px; margin-top:8px;">
-            <span style="color:#3366ff;">● Ground Truth (blue)</span> &nbsp;&nbsp;
-            <span style="color:#ff3333;">● Noisy Trajectories (red)</span> &nbsp;&nbsp;
-            <span style="color:#33cc33;">● Prediction (green)</span>
+    <!-- Right Canvas Panel -->
+    <div class="viz-panel" style="width:80%; display:flex; flex-direction:column; padding:15px;">
+        <canvas id="trajCanvas" width="2000" height="1400" style="width:100%; height:auto; max-width:1200px; background:white; border-radius:8px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></canvas>
+        <div style="font-size:11px; margin-top:10px; text-align:center;">
+            ✨ <strong>Tap/Click on any blue point</strong> → edit coordinates, time, or delete ✨
+        </div>
+    </div>
+</div>
+
+<!-- MODAL for editing waypoint -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <h3>✏️ Edit Waypoint #<span id="modalIndex">0</span></h3>
+        <div class="modal-field">
+            <label>📍 X coordinate:</label>
+            <input type="number" id="editX" step="any" placeholder="X">
+        </div>
+        <div class="modal-field">
+            <label>📍 Y coordinate:</label>
+            <input type="number" id="editY" step="any" placeholder="Y">
+        </div>
+        <div class="modal-field">
+            <label>⏱️ Time (t):</label>
+            <input type="number" id="editT" step="any" placeholder="Time">
+        </div>
+        <div class="modal-buttons">
+            <button id="modalDeleteBtn" class="delete-btn">🗑️ Delete</button>
+            <button id="modalCancelBtn" class="close-modal">Cancel</button>
+            <button id="modalSaveBtn" class="save-btn">💾 Save Changes</button>
         </div>
     </div>
 </div>
 
 <script>
-    let waypoint_list = [];  // Index 0 = ground truth, rest = noisy trajectories
-    let noisyTrajectories = [];  // Store noisy trajectories separately
-    let predictionTrajectory = null;  // Store prediction trajectory
+    // Data
+    let groundTruthWaypoints = [];      // {x, y, t}
+    let noisyTrajectories = [];
+    let predictionTrajectory = null;
     let EPS_BIN = 1;
-
+    
+    let currentEditingIndex = -1;       // which waypoint is being edited
+    
     const canvas = document.getElementById('trajCanvas');
     const ctx = canvas.getContext('2d');
-
-    // Default waypoints
+    const modal = document.getElementById('editModal');
+    const modalIndexSpan = document.getElementById('modalIndex');
+    const editXInput = document.getElementById('editX');
+    const editYInput = document.getElementById('editY');
+    const editTInput = document.getElementById('editT');
+    
+    // Helper: recompute times based on cumulative Euclidean distance (maintains order)
+    function recomputeTimes(waypoints) {
+        if (!waypoints.length) return;
+        waypoints[0].t = 0;
+        for (let i = 1; i < waypoints.length; i++) {
+            const prev = waypoints[i-1];
+            const curr = waypoints[i];
+            const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+            const dt = Math.max(0.3, dist / 45);  // smooth time progression
+            curr.t = prev.t + dt;
+        }
+    }
+    
+    // sort waypoints by time and recompute times to keep monotonic
+    function sortAndFixTimes(waypoints) {
+        if (waypoints.length <= 1) return;
+        waypoints.sort((a,b) => a.t - b.t);
+        recomputeTimes(waypoints);
+    }
+    
+    // initial default
     function initDefault() {
-        waypoint_list = [];
-        noisyTrajectories = [];
-        predictionTrajectory = null;
-        waypoint_list.push([
+        groundTruthWaypoints = [
             { x: 100, y: 400, t: 0 },
             { x: 350, y: 250, t: 5 },
             { x: 600, y: 380, t: 10 }
-        ]);
-        renderTable();
-        drawCanvas();
-    }
-
-    // Renders the ground truth trajectory
-    function renderTable() {
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-        const waypoints = waypoint_list[0];
-        if (!waypoints) return;
-        
-        for (let i = 0; i < waypoints.length; i++) {
-            const wp = waypoints[i];
-            const row = tbody.insertRow();
-            
-            row.insertCell(0).innerText = i;
-            
-            const xCell = row.insertCell(1);
-            const xInput = document.createElement('input');
-            xInput.type = 'number';
-            xInput.value = wp.x;
-            xInput.step = 'any';
-            xInput.onchange = ((idx) => (e) => {
-                waypoints[idx].x = parseFloat(e.target.value);
-                drawCanvas();
-            })(i);
-            xCell.appendChild(xInput);
-            
-            const yCell = row.insertCell(2);
-            const yInput = document.createElement('input');
-            yInput.type = 'number';
-            yInput.value = wp.y;
-            yInput.step = 'any';
-            yInput.onchange = ((idx) => (e) => {
-                waypoints[idx].y = parseFloat(e.target.value);
-                drawCanvas();
-            })(i);
-            yCell.appendChild(yInput);
-            
-            const tCell = row.insertCell(3);
-            const tInput = document.createElement('input');
-            tInput.type = 'number';
-            tInput.value = wp.t;
-            tInput.step = 'any';
-            tInput.onchange = ((idx) => (e) => {
-                waypoints[idx].t = parseFloat(e.target.value);
-                drawCanvas();
-            })(i);
-            tCell.appendChild(tInput);
-        }
-        
-        document.getElementById('statusMsg').innerHTML = `● ${waypoints.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s) | ${predictionTrajectory ? 'Pred loaded' : 'No pred'}`;
-        drawCanvas();
-    }
-
-    function addWaypoint() {
-        const waypoints = waypoint_list[0];
-        let last = waypoints[waypoints.length - 1];
-        let newX = last ? last.x + 50 : 100;
-        let newY = last ? last.y : 300;
-        let newT = last ? last.t + 3 : 0;
-        waypoints.push({ x: newX, y: newY, t: newT });
-        renderTable();
-    }
-
-    function removeLast() {
-        const waypoints = waypoint_list[0];
-        if (waypoints.length > 1) waypoints.pop();
-        else if (waypoints.length === 1) waypoints = [];
-        renderTable();
-    }
-
-    function resetAll() {
-        initDefault();
-    }
-
-    function clearNoise() {
-        // Keep only ground truth (index 0)
-        while (waypoint_list.length > 1) {
-            waypoint_list.pop();
-        }
+        ];
+        recomputeTimes(groundTruthWaypoints);
         noisyTrajectories = [];
-        renderTable();
-        drawCanvas();
-        document.getElementById('statusMsg').innerHTML = `● ${waypoint_list[0].length} waypoint(s) | Noise cleared`;
-    }
-
-    function clearPred() {
         predictionTrajectory = null;
-        renderTable();
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `✨ Default trajectory. Click any blue point to edit.`;
+    }
+    
+    function updateUIAndDraw() {
+        document.getElementById('wpCount').innerText = groundTruthWaypoints.length;
+        document.getElementById('noiseCount').innerText = noisyTrajectories.length;
         drawCanvas();
-        document.getElementById('statusMsg').innerHTML = `● ${waypoint_list[0].length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s) | Pred cleared`;
     }
-
-    // Gaussian Random Noise
-    function gaussianRandom(mean=0, stdev=1) {
-        const u = 1 - Math.random();
-        const v = Math.random();
-        const z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-        return z * stdev + mean;
-    }
-
-    // Uniform Noise
-
-    function generateNoiseTrajectory(maxNoiseTraj=5, noiseMean=0, noiseStd=30) {
-        noisyTrajectories = [];
-        const numNoiseTraj = Math.floor(Math.random() * maxNoiseTraj) + 1;
-        const baseTraj = waypoint_list[0];
-        
-        for (let i = 0; i < numNoiseTraj; i++) {
-            const newTraj = [];
-            
-            for (let pt = 0; pt < baseTraj.length; pt++) {
-                const cp = baseTraj[pt];
-                
-                // Keep start and end points fixed
-                if (pt === 0 || pt === baseTraj.length - 1) {
-                    newTraj.push({ x: cp.x, y: cp.y, t: cp.t });
-                } else {
-                    const noisyX = cp.x + gaussianRandom(noiseMean, noiseStd);
-                    const noisyY = cp.y + gaussianRandom(noiseMean, noiseStd);
-                    const noisyT = cp.t + gaussianRandom(noiseMean, 0.5);
-                    
-                    newTraj.push({ 
-                        x: noisyX, 
-                        y: noisyY, 
-                        t: noisyT
-                    });
-                }
+    
+    // interpolate X from time (for epsilon bins)
+    function interpolateXFromTime(t) {
+        if (!groundTruthWaypoints.length) return null;
+        if (t <= groundTruthWaypoints[0].t) return groundTruthWaypoints[0].x;
+        if (t >= groundTruthWaypoints[groundTruthWaypoints.length-1].t) return groundTruthWaypoints[groundTruthWaypoints.length-1].x;
+        for (let i = 0; i < groundTruthWaypoints.length - 1; i++) {
+            const p1 = groundTruthWaypoints[i];
+            const p2 = groundTruthWaypoints[i+1];
+            if (t >= p1.t && t <= p2.t) {
+                const frac = (t - p1.t) / (p2.t - p1.t);
+                return p1.x + frac * (p2.x - p1.x);
             }
-            
-            // Sort by time
-            newTraj.sort((a, b) => a.t - b.t);
-            waypoint_list.push(newTraj);
-            noisyTrajectories.push(newTraj);
         }
-        
-        renderTable();
-        drawCanvas();
-        document.getElementById('statusMsg').innerHTML = `● ${baseTraj.length} waypoint(s) | ${noisyTrajectories.length} noisy traj(s) | ${predictionTrajectory ? 'Pred loaded' : 'No pred'}`;
+        return null;
     }
-
-    function saveToJSON() {
-        if (waypoint_list.length === 0 || waypoint_list[0].length === 0) {
-            alert("No waypoints to save.");
-            return;
-        }
-
-        const data = {
-            ground_truth: waypoint_list[0],
-            noisy_trajectories: noisyTrajectories,
-            num_noisy: noisyTrajectories.length,
-            timestamp: new Date().toISOString()
-        };
-
-        const jsonStr = JSON.stringify(data, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `trajectory.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    function uploadPred() {
-        document.getElementById('uploadPredInput').click();
-    }
-
-    function handlePredLoad(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        
-        reader.onload = function(e) {
-            try {
-                const data = JSON.parse(e.target.result);
-                
-                // Handle different possible JSON formats
-                let predData = null;
-                
-                // Check for common formats
-                if (data.prediction) {
-                    predData = data.prediction;
-                } else if (data.ground_truth) {
-                    predData = data.ground_truth;
-                } else if (Array.isArray(data)) {
-                    predData = data;
-                } else if (data.data && Array.isArray(data.data)) {
-                    predData = data.data;
-                } else {
-                    // Try to find any array in the data
-                    for (let key in data) {
-                        if (Array.isArray(data[key]) && data[key].length > 0 && data[key][0].hasOwnProperty('x')) {
-                            predData = data[key];
-                            break;
-                        }
-                    }
-                }
-                
-                if (!predData || !Array.isArray(predData)) {
-                    alert("No valid prediction trajectory found in JSON. Expected format: {prediction: [{x, y, t}]} or [{x, y, t}]");
-                    return;
-                }
-                
-                // Convert to standard format
-                predictionTrajectory = predData.map(point => ({
-                    x: parseFloat(point.x),
-                    y: parseFloat(point.y),
-                    t: parseFloat(point.t)
-                }));
-                
-                // Sort by time
-                predictionTrajectory.sort((a, b) => a.t - b.t);
-                
-                renderTable();
-                drawCanvas();
-                
-                document.getElementById('statusMsg').innerHTML = `● Loaded pred: ${predictionTrajectory.length} points | ${noisyTrajectories.length} noisy traj(s)`;
-                
-            } catch (err) {
-                alert("Error parsing JSON file: " + err.message);
-            }
-        };
-        
-        reader.onerror = function() {
-            alert("Error reading file");
-        };
-        
-        reader.readAsText(file);
-        
-        // Clear the input so the same file can be loaded again
-        event.target.value = '';
-    }
-
+    
+    // DRAW EVERYTHING (ground truth, noisy, pred, bins)
     function drawCanvas() {
+        if (!ctx) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Draw grid
+        // Grid
         ctx.beginPath();
         ctx.strokeStyle = '#ddd';
         ctx.lineWidth = 0.5;
@@ -424,8 +368,6 @@
             ctx.lineTo(canvas.width, y);
             ctx.stroke();
         }
-        
-        // Draw axes
         ctx.beginPath();
         ctx.strokeStyle = '#999';
         ctx.lineWidth = 1;
@@ -435,242 +377,400 @@
         ctx.lineTo(canvas.width/2, canvas.height);
         ctx.stroke();
         
-        // ========== DRAW EPSILON BINS (Blue dashed vertical lines) ==========
-        const waypoints = waypoint_list[0];
-        if (waypoints && waypoints.length >= 2) {
-            const t0 = waypoints[0].t;
-            const tk = waypoints[waypoints.length - 1].t;
-            const epsilon = EPS_BIN;  // Use your epsilon value (e.g., 1)
-            
-            // Draw vertical dashed lines for each bin boundary
-            ctx.beginPath();
-            ctx.strokeStyle = '#3366ff';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([8, 6]);  // Dashed line pattern
-            
-            for (let t = t0; t <= tk; t += epsilon) {
-                // Find x position on canvas for this time
-                // Interpolate time to x position based on ground truth trajectory
-                let xPos = null;
-                
-                // Find which segment this time falls into
-                for (let i = 0; i < waypoints.length - 1; i++) {
-                    const wp1 = waypoints[i];
-                    const wp2 = waypoints[i + 1];
-                    
-                    if (t >= wp1.t && t <= wp2.t) {
-                        // Linear interpolation to find x at time t
-                        const frac = (t - wp1.t) / (wp2.t - wp1.t);
-                        xPos = wp1.x + frac * (wp2.x - wp1.x);
-                        break;
+        // Epsilon bins
+        if (groundTruthWaypoints.length >= 2) {
+            const t0 = groundTruthWaypoints[0].t;
+            const tk = groundTruthWaypoints[groundTruthWaypoints.length-1].t;
+            const eps = EPS_BIN;
+            if (eps > 0 && t0 < tk) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.strokeStyle = '#3366ff';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([8, 6]);
+                for (let t = t0; t <= tk + 0.1; t += eps) {
+                    let xPos = interpolateXFromTime(t);
+                    if (xPos !== null && xPos >= 0 && xPos <= canvas.width) {
+                        ctx.moveTo(xPos, 0);
+                        ctx.lineTo(xPos, canvas.height);
+                        ctx.stroke();
                     }
                 }
-                
-                if (xPos !== null) {
-                    ctx.moveTo(xPos, 0);
-                    ctx.lineTo(xPos, canvas.height);
-                    ctx.stroke();
-                }
-            }
-            
-            // Draw bin center markers (optional - small circles on the line)
-            ctx.setLineDash([]);  // Reset to solid
-            ctx.fillStyle = '#3366ff';
-            ctx.globalAlpha = 0.5;
-            for (let t = t0 + epsilon/2; t <= tk; t += epsilon) {
-                let xPos = null;
-                for (let i = 0; i < waypoints.length - 1; i++) {
-                    const wp1 = waypoints[i];
-                    const wp2 = waypoints[i + 1];
-                    if (t >= wp1.t && t <= wp2.t) {
-                        const frac = (t - wp1.t) / (wp2.t - wp1.t);
-                        xPos = wp1.x + frac * (wp2.x - wp1.x);
-                        break;
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#3366ff';
+                ctx.globalAlpha = 0.2;
+                for (let t = t0 + eps/2; t <= tk; t += eps) {
+                    let xPos = interpolateXFromTime(t);
+                    if (xPos !== null) {
+                        ctx.beginPath();
+                        ctx.arc(xPos, canvas.height/2, 5, 0, 2*Math.PI);
+                        ctx.fill();
                     }
                 }
-                if (xPos !== null) {
-                    ctx.beginPath();
-                    ctx.arc(xPos, canvas.height/2, 5, 0, 2 * Math.PI);
-                    ctx.fill();
-                }
+                ctx.globalAlpha = 1;
+                ctx.restore();
             }
-            ctx.globalAlpha = 1.0;
         }
         
-        // Draw noisy trajectories (red, semi-transparent)
-        for (let t = 0; t < noisyTrajectories.length; t++) {
-            const traj = noisyTrajectories[t];
+        // Noisy trajectories
+        for (let traj of noisyTrajectories) {
             if (traj.length >= 2) {
                 ctx.beginPath();
                 ctx.strokeStyle = '#ff3333';
-                ctx.lineWidth = 1.5;
-                ctx.globalAlpha = 0.5;
+                ctx.lineWidth = 1.8;
+                ctx.globalAlpha = 0.55;
                 ctx.moveTo(traj[0].x, traj[0].y);
-                for (let i = 1; i < traj.length; i++) {
+                for (let i=1; i<traj.length; i++) {
                     ctx.lineTo(traj[i].x, traj[i].y);
                     ctx.stroke();
                     ctx.beginPath();
                     ctx.moveTo(traj[i].x, traj[i].y);
                 }
+                for (let i=1; i<traj.length-1; i++) {
+                    ctx.beginPath();
+                    ctx.arc(traj[i].x, traj[i].y, 3, 0, 2*Math.PI);
+                    ctx.fillStyle = '#ff8888';
+                    ctx.fill();
+                }
             }
         }
+        ctx.globalAlpha = 1;
         
-        // Draw prediction trajectory (green)
+        // Prediction
         if (predictionTrajectory && predictionTrajectory.length >= 2) {
             ctx.beginPath();
             ctx.strokeStyle = '#33cc33';
             ctx.lineWidth = 3;
-            ctx.globalAlpha = 0.8;
+            ctx.globalAlpha = 0.85;
             ctx.moveTo(predictionTrajectory[0].x, predictionTrajectory[0].y);
-            for (let i = 1; i < predictionTrajectory.length; i++) {
+            for (let i=1; i<predictionTrajectory.length; i++) {
                 ctx.lineTo(predictionTrajectory[i].x, predictionTrajectory[i].y);
                 ctx.stroke();
                 ctx.beginPath();
                 ctx.moveTo(predictionTrajectory[i].x, predictionTrajectory[i].y);
             }
-            
-            // Draw prediction waypoints
-            for (let i = 0; i < predictionTrajectory.length; i++) {
+            for (let i=0; i<predictionTrajectory.length; i++) {
                 ctx.beginPath();
-                ctx.arc(predictionTrajectory[i].x, predictionTrajectory[i].y, 6, 0, 2 * Math.PI);
+                ctx.arc(predictionTrajectory[i].x, predictionTrajectory[i].y, 6, 0, 2*Math.PI);
                 ctx.fillStyle = '#33cc33';
                 ctx.fill();
-                
                 ctx.beginPath();
-                ctx.arc(predictionTrajectory[i].x, predictionTrajectory[i].y, 3, 0, 2 * Math.PI);
+                ctx.arc(predictionTrajectory[i].x, predictionTrajectory[i].y, 3, 0, 2*Math.PI);
                 ctx.fillStyle = 'white';
                 ctx.fill();
-                
-                ctx.fillStyle = '#33cc33';
+                ctx.fillStyle = '#1f5c1f';
                 ctx.font = 'bold 12px monospace';
-                ctx.fillText(i, predictionTrajectory[i].x - 3, predictionTrajectory[i].y - 5);
+                ctx.fillText(i, predictionTrajectory[i].x-3, predictionTrajectory[i].y-5);
             }
         }
-        ctx.globalAlpha = 1.0;
+        ctx.globalAlpha = 1;
         
-        // Draw ground truth trajectory (blue)
-        if (waypoints && waypoints.length >= 2) {
+        // Ground truth line
+        if (groundTruthWaypoints.length >= 2) {
             ctx.beginPath();
             ctx.strokeStyle = '#3366ff';
-            ctx.lineWidth = 3;
-            ctx.moveTo(waypoints[0].x, waypoints[0].y);
-            for (let i = 1; i < waypoints.length; i++) {
-                ctx.lineTo(waypoints[i].x, waypoints[i].y);
+            ctx.lineWidth = 3.2;
+            ctx.moveTo(groundTruthWaypoints[0].x, groundTruthWaypoints[0].y);
+            for (let i=1; i<groundTruthWaypoints.length; i++) {
+                ctx.lineTo(groundTruthWaypoints[i].x, groundTruthWaypoints[i].y);
                 ctx.stroke();
                 ctx.beginPath();
-                ctx.moveTo(waypoints[i].x, waypoints[i].y);
+                ctx.moveTo(groundTruthWaypoints[i].x, groundTruthWaypoints[i].y);
             }
         }
         
-        // Draw ground truth waypoints - BOLD VERTICES
-        if (waypoints) {
-            for (let i = 0; i < waypoints.length; i++) {
-                ctx.beginPath();
-                ctx.arc(waypoints[i].x, waypoints[i].y, 8, 0, 2 * Math.PI);
-                ctx.fillStyle = '#3366ff';
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.arc(waypoints[i].x, waypoints[i].y, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = 'white';
-                ctx.fill();
-                
-                ctx.fillStyle = '#3366ff';
-                ctx.font = 'bold 14px monospace';
-                ctx.fillText(i, waypoints[i].x - 4, waypoints[i].y - 6);
-            }
+        // Draw ground truth waypoints (large, interactive)
+        for (let i = 0; i < groundTruthWaypoints.length; i++) {
+            const wp = groundTruthWaypoints[i];
+            ctx.beginPath();
+            ctx.arc(wp.x, wp.y, 10, 0, 2 * Math.PI);
+            ctx.fillStyle = '#3366ff';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(wp.x, wp.y, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.fillStyle = '#0a2a66';
+            ctx.font = 'bold 14px monospace';
+            ctx.fillText(i, wp.x - 4, wp.y - 7);
+            // subtle glow effect on hover? just visual
         }
-        
-        // Draw noisy waypoints (small red dots)
-        for (let t = 0; t < noisyTrajectories.length; t++) {
-            const traj = noisyTrajectories[t];
-            for (let i = 1; i < traj.length - 1; i++) {
-                ctx.beginPath();
-                ctx.arc(traj[i].x, traj[i].y, 3, 0, 2 * Math.PI);
-                ctx.fillStyle = '#ff6666';
-                ctx.fill();
-            }
-        }
-        
-        // Reset line dash
         ctx.setLineDash([]);
     }
-
-    function updateEpsilon() {
-        EPS_BIN = parseFloat(document.getElementById('epsilonInput').value);
-        drawCanvas();
+    
+    // ----- MODAL LOGIC -----
+    function openEditModal(index) {
+        if (index < 0 || index >= groundTruthWaypoints.length) return;
+        currentEditingIndex = index;
+        const wp = groundTruthWaypoints[index];
+        modalIndexSpan.innerText = index;
+        editXInput.value = wp.x;
+        editYInput.value = wp.y;
+        editTInput.value = wp.t;
+        modal.style.display = 'flex';
     }
     
-    function loadFromJSON() {
-        document.getElementById('loadFileInput').click();
+    function closeModal() {
+        modal.style.display = 'none';
+        currentEditingIndex = -1;
     }
-
+    
+    function saveModalChanges() {
+        if (currentEditingIndex === -1 || currentEditingIndex >= groundTruthWaypoints.length) {
+            closeModal();
+            return;
+        }
+        let newX = parseFloat(editXInput.value);
+        let newY = parseFloat(editYInput.value);
+        let newT = parseFloat(editTInput.value);
+        if (isNaN(newX) || isNaN(newY) || isNaN(newT)) {
+            alert("Please enter valid numbers for X, Y and Time.");
+            return;
+        }
+        // clamp reasonable ranges
+        newX = Math.min(Math.max(newX, 5), canvas.width - 5);
+        newY = Math.min(Math.max(newY, 5), canvas.height - 5);
+        
+        groundTruthWaypoints[currentEditingIndex] = { x: newX, y: newY, t: newT };
+        // After manual time change, re-sort by time and recompute to keep monotonicity consistent
+        sortAndFixTimes(groundTruthWaypoints);
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `✏️ Waypoint #${currentEditingIndex} updated. Times reorganized.`;
+        closeModal();
+    }
+    
+    function deleteCurrentPoint() {
+        if (currentEditingIndex === -1) return;
+        if (groundTruthWaypoints.length <= 2) {
+            alert("Cannot delete: need at least 2 waypoints to keep a valid trajectory.");
+            closeModal();
+            return;
+        }
+        groundTruthWaypoints.splice(currentEditingIndex, 1);
+        sortAndFixTimes(groundTruthWaypoints);
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `🗑️ Deleted waypoint. ${groundTruthWaypoints.length} points remaining.`;
+        closeModal();
+    }
+    
+    // ----- CANVAS CLICK: DETECT WAYPOINT (edit modal) OR add new if empty space -----
+    function handleCanvasClick(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        let clientX, clientY;
+        if (e.touches) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+            e.preventDefault();
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        
+        let canvasX = (clientX - rect.left) * scaleX;
+        let canvasY = (clientY - rect.top) * scaleY;
+        canvasX = Math.min(Math.max(canvasX, 5), canvas.width - 5);
+        canvasY = Math.min(Math.max(canvasY, 5), canvas.height - 5);
+        
+        // Check if click hits any ground truth waypoint (radius 15px)
+        let hitIndex = -1;
+        for (let i = 0; i < groundTruthWaypoints.length; i++) {
+            const wp = groundTruthWaypoints[i];
+            const dx = wp.x - canvasX;
+            const dy = wp.y - canvasY;
+            if (Math.hypot(dx, dy) < 15) {
+                hitIndex = i;
+                break;
+            }
+        }
+        
+        if (hitIndex !== -1) {
+            // Open edit modal for this waypoint
+            openEditModal(hitIndex);
+        } else {
+            // Add new waypoint (tap on empty area)
+            if (groundTruthWaypoints.length === 0) {
+                groundTruthWaypoints.push({ x: canvasX, y: canvasY, t: 0 });
+                recomputeTimes(groundTruthWaypoints);
+            } else {
+                // Insert new point: we'll add then sort by distance from start to preserve spatial order.
+                groundTruthWaypoints.push({ x: canvasX, y: canvasY, t: 0 });
+                // sort by approximate distance from first point to maintain path continuity
+                const firstPt = groundTruthWaypoints[0];
+                groundTruthWaypoints.sort((a,b) => {
+                    const da = Math.hypot(a.x - firstPt.x, a.y - firstPt.y);
+                    const db = Math.hypot(b.x - firstPt.x, b.y - firstPt.y);
+                    return da - db;
+                });
+                recomputeTimes(groundTruthWaypoints);
+            }
+            updateUIAndDraw();
+            document.getElementById('statusMsg').innerHTML = `➕ New waypoint added at (${Math.round(canvasX)}, ${Math.round(canvasY)}). Click point to edit.`;
+            setTimeout(() => {
+                if (document.getElementById('statusMsg').innerHTML.includes("New waypoint")) {
+                    updateUIAndDraw();
+                }
+            }, 2000);
+        }
+    }
+    
+    // ----- NOISE GENERATION -----
+    function gaussianRandom(mean=0, stdev=28) {
+        let u = 1 - Math.random();
+        let v = Math.random();
+        let z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        return z * stdev + mean;
+    }
+    
+    function generateNoiseTrajectory(maxTraj=5, noiseStd=28) {
+        if (groundTruthWaypoints.length < 2) {
+            alert("Need at least 2 waypoints first.");
+            return;
+        }
+        noisyTrajectories = [];
+        const base = groundTruthWaypoints;
+        const num = Math.floor(Math.random() * maxTraj) + 1;
+        for (let n=0; n<num; n++) {
+            let newTraj = [];
+            for (let i=0; i<base.length; i++) {
+                const cp = base[i];
+                if (i===0 || i===base.length-1) {
+                    newTraj.push({ x: cp.x, y: cp.y, t: cp.t });
+                } else {
+                    let nx = cp.x + gaussianRandom(0, noiseStd);
+                    let ny = cp.y + gaussianRandom(0, noiseStd);
+                    let nt = cp.t + gaussianRandom(0, 0.6);
+                    newTraj.push({ x: nx, y: ny, t: Math.max(cp.t-0.5, nt) });
+                }
+            }
+            newTraj.sort((a,b)=>a.t-b.t);
+            noisyTrajectories.push(newTraj);
+        }
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `🎲 Added ${num} noisy trajectories.`;
+    }
+    
+    function clearNoise() { noisyTrajectories = []; updateUIAndDraw(); document.getElementById('statusMsg').innerHTML = `🧹 Noisy trajectories cleared.`; }
+    function clearPred() { predictionTrajectory = null; updateUIAndDraw(); document.getElementById('statusMsg').innerHTML = `❌ Prediction cleared.`; }
+    
+    // Save/Load JSON
+    function saveToJSON() {
+        if (!groundTruthWaypoints.length) { alert("No waypoints"); return; }
+        const data = { ground_truth: groundTruthWaypoints, noisy_trajectories: noisyTrajectories, timestamp: new Date().toISOString() };
+        const jsonStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `trajectory_${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        document.getElementById('statusMsg').innerHTML = `💾 Saved to JSON`;
+    }
+    
+    function loadFromJSON() { document.getElementById('loadFileInput').click(); }
     function handleFileLoad(event) {
         const file = event.target.files[0];
         if (!file) return;
-        
         const reader = new FileReader();
-        
-        reader.onload = function(e) {
+        reader.onload = (e) => {
             try {
                 const data = JSON.parse(e.target.result);
-                
-                // Clear existing data
-                waypoint_list = [];
-                noisyTrajectories = [];
-                
-                // Load ground truth
-                if (data.ground_truth) {
-                    waypoint_list.push(data.ground_truth);
+                if (data.ground_truth && Array.isArray(data.ground_truth)) {
+                    groundTruthWaypoints = data.ground_truth.map(p => ({ x: p.x, y: p.y, t: p.t }));
+                    sortAndFixTimes(groundTruthWaypoints);
                 } else if (data.waypoints) {
-                    // Handle older format
-                    waypoint_list.push(data.waypoints);
-                } else {
-                    alert("No valid trajectory data found in JSON");
-                    return;
-                }
-                
-                // Load noisy trajectories if present
-                if (data.noisy_trajectories && Array.isArray(data.noisy_trajectories)) {
-                    for (let traj of data.noisy_trajectories) {
-                        waypoint_list.push(traj);
-                        noisyTrajectories.push(traj);
-                    }
-                }
-                
-                // Update UI
-                renderTable();
-                drawCanvas();
-                
-                document.getElementById('statusMsg').innerHTML = `● Loaded: ${waypoint_list[0].length} waypoints | ${noisyTrajectories.length} noisy traj(s) | ${predictionTrajectory ? 'Pred loaded' : 'No pred'}`;
-                
-            } catch (err) {
-                alert("Error parsing JSON file: " + err.message);
-            }
+                    groundTruthWaypoints = data.waypoints.map(p => ({ x: p.x, y: p.y, t: p.t }));
+                    sortAndFixTimes(groundTruthWaypoints);
+                } else throw new Error("No ground_truth array");
+                noisyTrajectories = data.noisy_trajectories || [];
+                predictionTrajectory = null;
+                updateUIAndDraw();
+                document.getElementById('statusMsg').innerHTML = `📂 Loaded ${groundTruthWaypoints.length} points.`;
+            } catch(err) { alert("JSON error: " + err.message); }
         };
-        
-        reader.onerror = function() {
-            alert("Error reading file");
-        };
-        
         reader.readAsText(file);
-        
-        // Clear the input so the same file can be loaded again
         event.target.value = '';
     }
-
-    document.getElementById('addBtn').onclick = addWaypoint;
-    document.getElementById('removeBtn').onclick = removeLast;
-    document.getElementById('resetBtn').onclick = resetAll;
-    document.getElementById('clearNoiseBtn').onclick = clearNoise;
-    document.getElementById('clearPredBtn').onclick = clearPred;
-    document.getElementById('epsilonInput').onchange = updateEpsilon;
-    document.getElementById('loadBtn').onclick = loadFromJSON;
-    document.getElementById('loadFileInput').onchange = handleFileLoad;
-    document.getElementById('uploadPredBtn').onclick = uploadPred;
-    document.getElementById('uploadPredInput').onchange = handlePredLoad;
-
+    
+    function uploadPred() { document.getElementById('uploadPredInput').click(); }
+    function handlePredLoad(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                let predArr = null;
+                if (data.prediction) predArr = data.prediction;
+                else if (data.ground_truth) predArr = data.ground_truth;
+                else if (Array.isArray(data)) predArr = data;
+                else if (data.data && Array.isArray(data.data)) predArr = data.data;
+                else for (let key in data) { if (Array.isArray(data[key]) && data[key][0]?.x) { predArr = data[key]; break; } }
+                if (!predArr) throw new Error("No valid prediction array");
+                predictionTrajectory = predArr.map(p => ({ x: parseFloat(p.x), y: parseFloat(p.y), t: parseFloat(p.t) }));
+                predictionTrajectory.sort((a,b)=>a.t-b.t);
+                updateUIAndDraw();
+                document.getElementById('statusMsg').innerHTML = `📈 Prediction loaded (${predictionTrajectory.length} pts)`;
+            } catch(err) { alert("Prediction error: " + err.message); }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+    }
+    
+    // Button actions
+    function addPointButton() {
+        if (groundTruthWaypoints.length === 0) groundTruthWaypoints.push({ x: 200, y: 300, t: 0 });
+        else {
+            const last = groundTruthWaypoints[groundTruthWaypoints.length-1];
+            let newX = last.x + 45;
+            let newY = last.y + (Math.random() * 30 - 15);
+            groundTruthWaypoints.push({ x: newX, y: newY, t: last.t + 1.5 });
+        }
+        sortAndFixTimes(groundTruthWaypoints);
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `➕ Added point via button. Click to edit.`;
+    }
+    function removeLast() {
+        if (groundTruthWaypoints.length <= 2) { alert("Keep at least 2 waypoints."); return; }
+        groundTruthWaypoints.pop();
+        sortAndFixTimes(groundTruthWaypoints);
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `➖ Removed last point.`;
+    }
+    function resetAll() { initDefault(); }
+    function updateEpsilon() { EPS_BIN = parseFloat(document.getElementById('epsilonInput').value); drawCanvas(); }
+    
+    // Event listeners
+    function attachEvents() {
+        canvas.addEventListener('click', handleCanvasClick);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleCanvasClick(e); });
+        document.getElementById('loadBtn').onclick = loadFromJSON;
+        document.getElementById('loadFileInput').onchange = handleFileLoad;
+        document.getElementById('uploadPredBtn').onclick = uploadPred;
+        document.getElementById('uploadPredInput').onchange = handlePredLoad;
+        document.getElementById('addBtn').onclick = addPointButton;
+        document.getElementById('removeBtn').onclick = removeLast;
+        document.getElementById('resetBtn').onclick = resetAll;
+        document.getElementById('noiseBtn').onclick = () => generateNoiseTrajectory(5, 28);
+        document.getElementById('clearNoiseBtn').onclick = clearNoise;
+        document.getElementById('clearPredBtn').onclick = clearPred;
+        document.getElementById('saveBtn').onclick = saveToJSON;
+        document.getElementById('epsilonInput').onchange = updateEpsilon;
+        
+        // Modal buttons
+        document.getElementById('modalSaveBtn').onclick = saveModalChanges;
+        document.getElementById('modalCancelBtn').onclick = closeModal;
+        document.getElementById('modalDeleteBtn').onclick = deleteCurrentPoint;
+        window.onclick = (e) => { if (e.target === modal) closeModal(); };
+    }
+    
     initDefault();
+    attachEvents();
 </script>
 </body>
 </html>
