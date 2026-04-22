@@ -80,17 +80,17 @@ def metric(gt, pred):
     rel_error_y = 0
 
     for (x_gt, y_gt, t_gt), (x_pred, y_pred, t_pred) in zip(gt, pred):
-        abs_error_x += (x_pred - interpolate_x)
-        abs_error_y += (y_pred - interpolate_y)
-        rel_error_x += (x_pred - interpolate_x) / interpolate_x
-        rel_error_y += (y_pred - interpolate_y) / interpolate_y
+        abs_error_x += (x_pred - x_gt)
+        abs_error_y += (y_pred - y_gt)
+        rel_error_x += (x_pred - x_gt) / x_gt
+        rel_error_y += (y_pred - y_gt) / y_gt
 
     abs_error_x /= len(gt)
     abs_error_y /= len(gt)  
     rel_error_x /= len(gt)
     rel_error_y /= len(gt)
 
-    return abs_error_x, abs_error_y, rel_error_x, rel_error_y
+    return [abs_error_x, abs_error_y, rel_error_x, rel_error_y]
 
 """
 Save trajectories
