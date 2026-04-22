@@ -46,13 +46,14 @@ class Solvers:
             hull = self.computeConvexHull(idx)
             pred_x = 0 
             pred_y = 0
-            t = (self.noise_bins[0][0] + self.noise_bins[0][1]) / 2
+            bin_start, bin_end, int_start, int_end =  self.noise_bins[0][idx]
+            t = (bin_start + bin_end) / 2
             for vert in hull.vertices:
                 pred_x += hull.points[vert][0]
                 pred_y += hull.points[vert][1]
             pred_x /= len(hull.vertices)
             pred_y /= len(hull.vertices)
-            traj_pred.append([pred_x, pred_y, t])
+            traj_pred.append([float(pred_x), float(pred_y), float(t)])
         x,y,t = self.gt[-1]
         traj_pred.append([int(x), int(y), int(t)])
         return traj_pred
@@ -70,12 +71,6 @@ class Solvers:
             cur_noise_bins = [self.noise_bins[noise_idx][idx] for noise_idx in range(len(self.noise_bins))]
             bin_start, bin_end, int_start, int_end = self.gt_bins[idx]
             t = (bin_start + bin_end) / 2
-            # gt_x0, gt_y0 = self.gt[int_start][0], self.gt[int_start][1]
-            # gt_x1, gt_y1 = self.gt[int_end][0], self.gt[int_end][1]
-            # gt_t0, gt_t1 = self.gt[int_start][2], self.gt[int_end][2]
-            # interpolate_gt = lin_interpolation(gt_t0, gt_t1, gt_x0, gt_x1, gt_y0, gt_y1, t)
-            # x_avg += interpolate_gt[0]
-            # y_avg += interpolate_gt[1]
             for nt in range(len(cur_noise_bins)):
                 cur_noise = self.noise_traj[nt]
                 bin_start, bin_end, int_start, int_end = cur_noise_bins[nt]
@@ -88,7 +83,7 @@ class Solvers:
                 count += 1
             x_avg /= count
             y_avg /= count
-            pred_traj.append([x_avg, y_avg, t])
+            pred_traj.append([float(x_avg), float(y_avg), float(t)])
         x,y,t = self.gt[-1]
         pred_traj.append([int(x), int(y), int(t)])
         return pred_traj
@@ -101,7 +96,8 @@ class Solvers:
         return metric(self.gt, pred)
 
 if __name__ == "__main__":
-    solver = Solvers(path="example/trajectory.json")
+    solver = Solvers(path="trajectory.json")
     pred = solver.ComputeGaussianTrajectory()
-    print(pred)
+    # pred = solver.computeConvexHullTrajectory()
+    # print(pred)
     save_pred(pred)
