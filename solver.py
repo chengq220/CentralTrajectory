@@ -28,10 +28,9 @@ class Solvers:
     """
     Compute convex hull given a time bin and the points belonging to the time bin
     """
-    def __computeConvexHull(self, bin_idx):
+    def __computeConvexHull(self, bin_idx, num_points=5):
         # interpolate the points in the bin at 3 points, the two end points of the bin and the middle point
         bin_start, bin_end, int_start, int_end = self.gt_bins[bin_idx]
-        t = (bin_start + bin_end) / 2
         bin_pts = []
         cur_noise_bins = [self.noise_bins[noise_idx][bin_idx] for noise_idx in range(len(self.noise_bins))]
         for nt in range(self.noise_traj.shape[0]):
@@ -40,12 +39,10 @@ class Solvers:
             noise_x0, noise_y0 = cur_noise[int_start][0], cur_noise[int_start][1]
             noise_x1, noise_y1 = cur_noise[int_end][0], cur_noise[int_end][1]
             noise_t0, noise_t1 = cur_noise[int_start][2], cur_noise[int_end][2]
-            interpolate_noise_t = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
-            interpolate_noise_t0 = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
-            interpolate_noise_t1 = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
-            bin_pts.append([interpolate_noise_t[0], interpolate_noise_t[1]])
-            bin_pts.append([interpolate_noise_t0[0], interpolate_noise_t0[1]])
-            bin_pts.append([interpolate_noise_t1[0], interpolate_noise_t1[1]])
+            for _ in range(num_points):
+                t = np.random.uniform(bin_start, bin_end)
+                interpolate_noise_t = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
+                bin_pts.append([interpolate_noise_t[0], interpolate_noise_t[1]])
         bin_pts = np.array(bin_pts)
         hull = ConvexHull(bin_pts)
         return hull

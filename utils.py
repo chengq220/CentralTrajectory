@@ -79,7 +79,7 @@ def metric(gt, pred):
     rel_error_x = 0
     rel_error_y = 0
 
-    for (x_gt, y_gt, t_gt), (x_pred, y_pred, t_pred) in zip(gt, pred):
+    for (x_gt, y_gt, _), (x_pred, y_pred, _) in zip(gt, pred):
         abs_error_x += (x_pred - x_gt)
         abs_error_y += (y_pred - y_gt)
         rel_error_x += (x_pred - x_gt) / x_gt
