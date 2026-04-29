@@ -44,7 +44,7 @@ class Solvers:
                 interpolate_noise_t = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
                 bin_pts.append([interpolate_noise_t[0], interpolate_noise_t[1]])
         bin_pts = np.array(bin_pts)
-        hull = ConvexHull(bin_pts)
+        hull = ConvexHull(bin_pts, qhull_options="QJ")
         return hull
 
     """
@@ -111,7 +111,8 @@ class Solvers:
         return metric(self.interpolated_gt, pred)
 
 if __name__ == "__main__":
-    solver = Solvers(path="trajectory.json")
+    solver = Solvers(path="example/trajectory_nonoise.json")
+
     pred = solver.ComputeGaussianTrajectory()
     save_pred(pred)
     print(solver.computeMetrics(pred))
