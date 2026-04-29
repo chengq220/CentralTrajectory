@@ -3,7 +3,7 @@ from solver import Solvers
 from glob import glob 
 
 if __name__ == "__main__":
-    file_path = glob("example/noise/*.json")
+    file_path = glob("example/pois_noise/*.json")
     num_files = len(file_path)
 
     gauss = np.zeros(4)
@@ -14,14 +14,14 @@ if __name__ == "__main__":
         solver = Solvers(path=f)
 
         pred = solver.ComputeGaussianTrajectory()
-        # save_pred(pred)
         gauss_metric = solver.computeMetrics(pred)
         gauss += gauss_metric
 
         pred = solver.computeConvexHullTrajectory()
-        # save_pred(pred, name="pred_CH")
         hull_metric = solver.computeMetrics(pred)
         hull += hull_metric
 
-    print("Gaussian Trajectory Average Metrics: ", gauss/num_files)
-    print("Convex Hull Trajectory Average Metrics: ", hull/num_files)
+    print("Gaussian Trajectory Average Metrics: ")
+    print(np.array2string(gauss/num_files, precision=10, floatmode='fixed'))
+    print("Convex Hull Trajectory Average Metrics: ")
+    print(np.array2string(hull/num_files, precision=10, floatmode='fixed'))

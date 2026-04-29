@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Trajectory Editor: Click to Edit Waypoint + Random Gen</title>
+    <title>Trajectory Editor: Gaussian + Poisson Burst Noise</title>
     <style>
         * {
             margin: 0;
@@ -27,7 +27,7 @@
 
         /* Left panel */
         .input-panel {
-            width: 20%;
+            width: 22%;
             background: #f5f5f5;
             border-right: 1px solid #ccc;
             padding: 15px;
@@ -46,7 +46,7 @@
             background: #e9e9e9;
             border-radius: 6px;
             padding: 8px 10px;
-            font-size: 12px;
+            font-size: 11px;
             border-left: 3px solid #3366ff;
         }
 
@@ -71,6 +71,7 @@
             background: #e0e0e0;
             transform: scale(0.97);
         }
+        
         .param-group {
             display: flex;
             align-items: center;
@@ -79,9 +80,10 @@
             padding: 6px 10px;
             border-radius: 6px;
             border: 1px solid #ddd;
+            flex-wrap: wrap;
         }
         .param-group label {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: bold;
         }
         input {
@@ -111,6 +113,19 @@
         }
         hr {
             margin: 5px 0;
+        }
+        
+        .noise-type-group {
+            background: #f0f7ff;
+            border-left: 3px solid #ff6600;
+            padding: 8px;
+            border-radius: 6px;
+        }
+        .noise-type-group .title {
+            font-weight: bold;
+            font-size: 11px;
+            margin-bottom: 6px;
+            color: #cc5500;
         }
 
         /* MODAL STYLES */
@@ -186,30 +201,6 @@
         .close-modal {
             background: #eee;
         }
-        .waypoint-badge {
-            display: inline-block;
-            background: #3366ff20;
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-size: 10px;
-        }
-        .random-param-row {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-            background: #fff;
-            padding: 6px 10px;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-            flex-wrap: wrap;
-        }
-        .random-param-row label {
-            font-size: 11px;
-            font-weight: bold;
-        }
-        .random-param-row input {
-            width: 55px;
-        }
     </style>
 </head>
 <body>
@@ -234,14 +225,13 @@
             <button id="resetBtn">🔄 Reset</button>
         </div>
 
-        <!-- Random Trajectory Generator Section -->
-        <div class="random-param-row">
-            <label>🎲 Random:</label>
+        <!-- Random Trajectory Generator -->
+        <div class="param-group">
+            <label>🎲 Random Traj:</label>
             <input type="number" id="randomPointsNum" value="5" min="3" max="12" step="1" style="width: 48px;">
             <label>pts</label>
             <input type="number" id="randomSpread" value="60" min="20" max="150" step="5" style="width: 55px;">
-            <label>spread</label>
-            <button id="randomTrajBtn" style="background:#e3f2fd;">✨ Random Traj</button>
+            <button id="randomTrajBtn">✨ Generate</button>
         </div>
 
         <div class="param-group">
@@ -249,15 +239,35 @@
             <input type="number" id="epsilonInput" value="1" step="0.5" min="0.1" style="width: 65px;">
         </div>
 
+        <!-- NOISE SECTION: GAUSSIAN + POISSON BURST -->
+        <div class="noise-type-group">
+            <div class="title">⚡ NOISE MODELS</div>
+            <div class="param-group" style="margin-bottom: 6px;">
+                <label>🎲 Gaussian:</label>
+                <input type="number" id="gaussianStd" value="25" step="5" min="5" max="80" style="width: 55px;">
+                <label>std</label>
+                <button id="noiseBtn">Add</button>
+            </div>
+            <div class="param-group">
+                <label>⚠️ Poisson Burst:</label>
+                <input type="number" id="poissonLambda" value="0.3" step="0.1" min="0.1" max="2.0" style="width: 55px;">
+                <label>rate</label>
+                <input type="number" id="burstMagnitude" value="80" step="10" min="30" max="200" style="width: 55px;">
+                <label>mag</label>
+                <button id="poissonBurstBtn">Add</button>
+            </div>
+            <div class="btn-group" style="margin-top: 5px;">
+                <button id="clearNoiseBtn">🗑️ Clear All Noise</button>
+                <button id="clearPredBtn">❌ Clear Pred</button>
+            </div>
+        </div>
+
         <div class="btn-group">
-            <button id="noiseBtn">🎲 Add Random Noise</button>
-            <button id="clearNoiseBtn">🗑️ Clear Noise</button>
-            <button id="clearPredBtn">❌ Clear Pred</button>
             <button id="saveBtn">💾 Save to JSON</button>
         </div>
 
         <div class="status" id="statusMsg">
-            💡 Click on any blue waypoint to edit
+            💡 Click on blue waypoint to edit
         </div>
 
         <div class="legend">
@@ -266,15 +276,15 @@
             <span style="color:#33cc33">● Prediction</span>
             <hr>
             <span>📌 <strong>Waypoints:</strong> <span id="wpCount">0</span></span>
-            <span>🎲 <strong>Noise:</strong> <span id="noiseCount">0</span></span>
+            <span>🎲 <strong>Noise Trajs:</strong> <span id="noiseCount">0</span></span>
         </div>
     </div>
 
     <!-- Right Canvas Panel -->
-    <div class="viz-panel" style="width:80%; display:flex; flex-direction:column; padding:15px;">
+    <div class="viz-panel" style="width:78%; display:flex; flex-direction:column; padding:15px;">
         <canvas id="trajCanvas" width="2000" height="1400" style="width:100%; height:auto; max-width:1200px; background:white; border-radius:8px; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></canvas>
         <div style="font-size:11px; margin-top:10px; text-align:center;">
-            ✨ <strong>Tap/Click on any blue point</strong> → edit coordinates, time, or delete ✨
+            ✨ <strong>Tap/Click on any blue point</strong> → edit coordinates, time, or delete ✨<br>
         </div>
     </div>
 </div>
@@ -305,12 +315,12 @@
 
 <script>
     // Data
-    let groundTruthWaypoints = [];      // {x, y, t}
+    let groundTruthWaypoints = [];
     let noisyTrajectories = [];
     let predictionTrajectory = null;
     let EPS_BIN = 1;
     
-    let currentEditingIndex = -1;       // which waypoint is being edited
+    let currentEditingIndex = -1;
     
     const canvas = document.getElementById('trajCanvas');
     const ctx = canvas.getContext('2d');
@@ -320,7 +330,7 @@
     const editYInput = document.getElementById('editY');
     const editTInput = document.getElementById('editT');
     
-    // Helper: recompute times based on cumulative Euclidean distance (maintains order)
+    // Helper functions
     function recomputeTimes(waypoints) {
         if (!waypoints.length) return;
         waypoints[0].t = 0;
@@ -328,19 +338,17 @@
             const prev = waypoints[i-1];
             const curr = waypoints[i];
             const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
-            const dt = Math.max(0.3, dist / 42);  // smooth time progression
+            const dt = Math.max(0.3, dist / 42);
             curr.t = prev.t + dt;
         }
     }
     
-    // sort waypoints by time and recompute times to keep monotonic
     function sortAndFixTimes(waypoints) {
         if (waypoints.length <= 1) return;
         waypoints.sort((a,b) => a.t - b.t);
         recomputeTimes(waypoints);
     }
     
-    // initial default
     function initDefault() {
         groundTruthWaypoints = [
             { x: 100, y: 400, t: 0 },
@@ -354,53 +362,37 @@
         document.getElementById('statusMsg').innerHTML = `✨ Default trajectory. Click any blue point to edit.`;
     }
     
-    // RANDOM TRAJECTORY GENERATOR (organic smooth path with random turns)
+    // Generate random smooth trajectory
     function generateRandomTrajectory() {
         const numPoints = parseInt(document.getElementById('randomPointsNum').value, 10);
         let spread = parseFloat(document.getElementById('randomSpread').value);
         spread = Math.min(Math.max(spread, 25), 200);
         
         if (isNaN(numPoints) || numPoints < 2) {
-            alert("At least 2 points required for trajectory.");
+            alert("At least 2 points required.");
             return;
         }
         const effectivePoints = Math.min(Math.max(numPoints, 2), 15);
-        
-        // Canvas safe margins
         const margin = 40;
-        const minX = margin;
-        const maxX = canvas.width - margin;
-        const minY = margin;
-        const maxY = canvas.height - margin;
+        const minX = margin, maxX = canvas.width - margin;
+        const minY = margin, maxY = canvas.height - margin;
         
-        // generate random start point
         let startX = minX + Math.random() * (maxX - minX);
         let startY = minY + Math.random() * (maxY - minY);
-        
         let waypoints = [{ x: startX, y: startY, t: 0 }];
-        
         let prevAngle = Math.random() * Math.PI * 2;
         let prevX = startX, prevY = startY;
         
         for (let i = 1; i < effectivePoints; i++) {
-            // Random walk with angle smoothing: avoid wild swings but allow organic curves
-            let angleChange = (Math.random() - 0.5) * 1.4; // -0.7 to +0.7 rad (~ +/-40 deg)
+            let angleChange = (Math.random() - 0.5) * 1.4;
             let newAngle = prevAngle + angleChange;
-            
-            // Add occasional large variation maybe 10% chance of stronger turn
-            if (Math.random() < 0.2) {
-                newAngle += (Math.random() - 0.5) * 1.2;
-            }
-            
-            let stepSize = spread * (0.6 + Math.random() * 0.9); // variable step
-            // limit step based on bounds to avoid rush out
+            if (Math.random() < 0.2) newAngle += (Math.random() - 0.5) * 1.2;
+            let stepSize = spread * (0.6 + Math.random() * 0.9);
             let dx = Math.cos(newAngle) * stepSize;
             let dy = Math.sin(newAngle) * stepSize;
-            
             let newX = prevX + dx;
             let newY = prevY + dy;
             
-            // Bounce/clamp with slight inward reflection to keep inside bounds
             if (newX < minX) { newX = minX + (minX - newX) * 0.6; newAngle = Math.PI - newAngle; }
             if (newX > maxX) { newX = maxX - (newX - maxX) * 0.6; newAngle = Math.PI - newAngle; }
             if (newY < minY) { newY = minY + (minY - newY) * 0.6; newAngle = -newAngle; }
@@ -408,16 +400,10 @@
             
             newX = Math.min(maxX, Math.max(minX, newX));
             newY = Math.min(maxY, Math.max(minY, newY));
-            
             waypoints.push({ x: newX, y: newY, t: 0 });
-            prevX = newX;
-            prevY = newY;
-            prevAngle = newAngle;
+            prevX = newX; prevY = newY; prevAngle = newAngle;
         }
-        
-        // final smoothing: recompute times, ensure spatial coherence is fine, but also we can slightly jitter positions for more realism? optional.
         recomputeTimes(waypoints);
-        // optional tiny gaussian jitter (10% of spread) to make it more organic
         for (let i = 1; i < waypoints.length - 1; i++) {
             if (Math.random() < 0.5) {
                 waypoints[i].x += (Math.random() - 0.5) * 12;
@@ -427,12 +413,140 @@
             }
         }
         recomputeTimes(waypoints);
-        
         groundTruthWaypoints = waypoints;
         noisyTrajectories = [];
         predictionTrajectory = null;
         updateUIAndDraw();
-        document.getElementById('statusMsg').innerHTML = `🎲 Random trajectory generated with ${groundTruthWaypoints.length} waypoints. Click points to edit.`;
+        document.getElementById('statusMsg').innerHTML = `🎲 Random trajectory with ${groundTruthWaypoints.length} waypoints.`;
+    }
+    
+    // ========== NOISE GENERATORS ==========
+    function gaussianRandom(mean=0, stdev=25) {
+        let u = 1 - Math.random();
+        let v = Math.random();
+        let z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        return z * stdev + mean;
+    }
+    
+    // Poisson-based burst noise: returns true if a burst occurs at this point (rare event)
+    // lambda controls average burst probability per point (e.g., 0.3 = 30% chance across trajectory)
+    function poissonBurstOccurs(lambdaPerPoint) {
+        // Poisson process: P(k events) = e^(-λ) * λ^k / k!
+        // For k>=1, we treat as burst event
+        return Math.random() < lambdaPerPoint;
+    }
+    
+    // Generate trajectory with GAUSSIAN noise (continuous, all interior points)
+    function addGaussianNoise() {
+        if (groundTruthWaypoints.length < 2) {
+            alert("Need at least 2 waypoints first.");
+            return;
+        }
+        const gaussianStd = parseFloat(document.getElementById('gaussianStd').value);
+        noisyTrajectories = [];
+        const numTraj = Math.floor(Math.random() * 5) + 1; // 1-5 trajectories
+        
+        for (let n = 0; n < numTraj; n++) {
+            let newTraj = [];
+            for (let i = 0; i < groundTruthWaypoints.length; i++) {
+                const cp = groundTruthWaypoints[i];
+                if (i === 0 || i === groundTruthWaypoints.length - 1) {
+                    newTraj.push({ x: cp.x, y: cp.y, t: cp.t });
+                } else {
+                    let nx = cp.x + gaussianRandom(0, gaussianStd);
+                    let ny = cp.y + gaussianRandom(0, gaussianStd);
+                    let nt = cp.t + gaussianRandom(0, 0.5);
+                    newTraj.push({ x: nx, y: ny, t: Math.max(cp.t - 0.3, nt) });
+                }
+            }
+            newTraj.sort((a,b) => a.t - b.t);
+            noisyTrajectories.push(newTraj);
+        }
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `🎲 Added ${numTraj} Gaussian noise trajectories (std=${gaussianStd}).`;
+    }
+    
+    // Poisson BURST noise: rare, large-magnitude spikes simulating sensor glitches
+    function addPoissonBurstNoise() {
+        if (groundTruthWaypoints.length < 2) {
+            alert("Need at least 2 waypoints first.");
+            return;
+        }
+        
+        const lambda = parseFloat(document.getElementById('poissonLambda').value); // burst rate per point
+        const burstMag = parseFloat(document.getElementById('burstMagnitude').value);
+        
+        // Create 1-3 burst trajectories
+        const numBurstTrajs = Math.floor(Math.random() * 3) + 1;
+        let burstTrajectories = [];
+        
+        for (let trajIdx = 0; trajIdx < numBurstTrajs; trajIdx++) {
+            let newTraj = [];
+            let burstCount = 0;
+            
+            for (let i = 0; i < groundTruthWaypoints.length; i++) {
+                const cp = groundTruthWaypoints[i];
+                // Start and end points remain fixed (no noise for anchor points)
+                if (i === 0 || i === groundTruthWaypoints.length - 1) {
+                    newTraj.push({ x: cp.x, y: cp.y, t: cp.t });
+                    continue;
+                }
+                
+                // Check if Poisson burst occurs at this point
+                const hasBurst = poissonBurstOccurs(lambda);
+                
+                if (hasBurst) {
+                    burstCount++;
+                    // Large burst noise - can be positive or negative spike
+                    let burstX = cp.x + (Math.random() - 0.5) * burstMag * 1.5;
+                    let burstY = cp.y + (Math.random() - 0.5) * burstMag * 1.2;
+                    let burstT = cp.t + (Math.random() - 0.5) * 1.2;
+                    
+                    // Clamp to visible area
+                    burstX = Math.min(Math.max(burstX, 15), canvas.width - 15);
+                    burstY = Math.min(Math.max(burstY, 15), canvas.height - 15);
+                    newTraj.push({ x: burstX, y: burstY, t: Math.max(0, burstT) });
+                } else {
+                    // Minor Gaussian jitter for realism (sensor thermal noise)
+                    let minorX = cp.x + (Math.random() - 0.5) * 8;
+                    let minorY = cp.y + (Math.random() - 0.5) * 8;
+                    let minorT = cp.t + (Math.random() - 0.5) * 0.2;
+                    newTraj.push({ x: minorX, y: minorY, t: Math.max(cp.t - 0.1, minorT) });
+                }
+            }
+            
+            newTraj.sort((a,b) => a.t - b.t);
+            burstTrajectories.push(newTraj);
+            
+            // Show burst statistics
+            console.log(`Burst trajectory ${trajIdx+1}: ${burstCount} bursts (λ=${lambda})`);
+        }
+        
+        // Append to existing noisy trajectories (keep previous noise if any)
+        noisyTrajectories.push(...burstTrajectories);
+        updateUIAndDraw();
+        
+        const totalBursts = burstTrajectories.reduce((sum, traj) => {
+            return sum + traj.filter((p, idx) => idx !== 0 && idx !== traj.length-1).filter((_, idx2) => {
+                const original = groundTruthWaypoints[idx2+1];
+                const disturbed = traj[idx2+1];
+                return original && Math.hypot(disturbed.x - original.x, disturbed.y - original.y) > 30;
+            }).length;
+        }, 0);
+        
+        document.getElementById('statusMsg').innerHTML = `🔥 POISSON BURST: Added ${burstTrajectories.length} glitched trajectories | ${totalBursts} total bursts (λ=${lambda}, magnitude=${burstMag}) — simulates radiation spikes!`;
+    }
+    
+    function clearNoise() { 
+        noisyTrajectories = []; 
+        updateUIAndDraw(); 
+        document.getElementById('statusMsg').innerHTML = `🧹 All noise trajectories cleared.`; 
+    }
+    
+    function clearPred() { 
+        predictionTrajectory = null; 
+        updateUIAndDraw(); 
+        document.getElementById('statusMsg').innerHTML = `❌ Prediction cleared.`; 
     }
     
     function updateUIAndDraw() {
@@ -457,7 +571,7 @@
         return null;
     }
     
-    // DRAW EVERYTHING (ground truth, noisy, pred, bins)
+    // DRAW function
     function drawCanvas() {
         if (!ctx) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -476,15 +590,6 @@
             ctx.lineTo(canvas.width, y);
             ctx.stroke();
         }
-        ctx.beginPath();
-        ctx.strokeStyle = '#999';
-        ctx.lineWidth = 1;
-        ctx.moveTo(0, canvas.height/2);
-        ctx.lineTo(canvas.width, canvas.height/2);
-        ctx.stroke();
-        ctx.moveTo(canvas.width/2, 0);
-        ctx.lineTo(canvas.width/2, canvas.height);
-        ctx.stroke();
         
         // Epsilon bins
         if (groundTruthWaypoints.length >= 2) {
@@ -521,13 +626,13 @@
             }
         }
         
-        // Noisy trajectories
+        // Draw noisy trajectories (red = Gaussian, orange-red = Poisson bursts)
         for (let traj of noisyTrajectories) {
             if (traj.length >= 2) {
                 ctx.beginPath();
-                ctx.strokeStyle = '#ff3333';
+                ctx.strokeStyle = '#ff6347';
                 ctx.lineWidth = 1.8;
-                ctx.globalAlpha = 0.55;
+                ctx.globalAlpha = 0.65;
                 ctx.moveTo(traj[0].x, traj[0].y);
                 for (let i=1; i<traj.length; i++) {
                     ctx.lineTo(traj[i].x, traj[i].y);
@@ -535,10 +640,10 @@
                     ctx.beginPath();
                     ctx.moveTo(traj[i].x, traj[i].y);
                 }
-                for (let i=1; i<traj.length-1; i++) {
+                for (let i=0; i<traj.length; i++) {
                     ctx.beginPath();
                     ctx.arc(traj[i].x, traj[i].y, 3, 0, 2*Math.PI);
-                    ctx.fillStyle = '#ff8888';
+                    ctx.fillStyle = '#ff8866';
                     ctx.fill();
                 }
             }
@@ -567,12 +672,8 @@
                 ctx.arc(predictionTrajectory[i].x, predictionTrajectory[i].y, 3, 0, 2*Math.PI);
                 ctx.fillStyle = 'white';
                 ctx.fill();
-                ctx.fillStyle = '#1f5c1f';
-                ctx.font = 'bold 12px monospace';
-                ctx.fillText(i, predictionTrajectory[i].x-3, predictionTrajectory[i].y-5);
             }
         }
-        ctx.globalAlpha = 1;
         
         // Ground truth line
         if (groundTruthWaypoints.length >= 2) {
@@ -588,7 +689,7 @@
             }
         }
         
-        // Draw ground truth waypoints (large, interactive)
+        // Draw ground truth waypoints
         for (let i = 0; i < groundTruthWaypoints.length; i++) {
             const wp = groundTruthWaypoints[i];
             ctx.beginPath();
@@ -606,7 +707,7 @@
         ctx.setLineDash([]);
     }
     
-    // ----- MODAL LOGIC -----
+    // MODAL logic
     function openEditModal(index) {
         if (index < 0 || index >= groundTruthWaypoints.length) return;
         currentEditingIndex = index;
@@ -618,146 +719,61 @@
         modal.style.display = 'flex';
     }
     
-    function closeModal() {
-        modal.style.display = 'none';
-        currentEditingIndex = -1;
-    }
+    function closeModal() { modal.style.display = 'none'; currentEditingIndex = -1; }
     
     function saveModalChanges() {
-        if (currentEditingIndex === -1 || currentEditingIndex >= groundTruthWaypoints.length) {
-            closeModal();
-            return;
-        }
+        if (currentEditingIndex === -1 || currentEditingIndex >= groundTruthWaypoints.length) { closeModal(); return; }
         let newX = parseFloat(editXInput.value);
         let newY = parseFloat(editYInput.value);
         let newT = parseFloat(editTInput.value);
-        if (isNaN(newX) || isNaN(newY) || isNaN(newT)) {
-            alert("Please enter valid numbers for X, Y and Time.");
-            return;
-        }
-        // clamp reasonable ranges
+        if (isNaN(newX) || isNaN(newY) || isNaN(newT)) { alert("Valid numbers required."); return; }
         newX = Math.min(Math.max(newX, 5), canvas.width - 5);
         newY = Math.min(Math.max(newY, 5), canvas.height - 5);
-        
         groundTruthWaypoints[currentEditingIndex] = { x: newX, y: newY, t: newT };
-        // After manual time change, re-sort by time and recompute to keep monotonicity consistent
         sortAndFixTimes(groundTruthWaypoints);
         updateUIAndDraw();
-        document.getElementById('statusMsg').innerHTML = `✏️ Waypoint #${currentEditingIndex} updated. Times reorganized.`;
+        document.getElementById('statusMsg').innerHTML = `✏️ Waypoint #${currentEditingIndex} updated.`;
         closeModal();
     }
     
     function deleteCurrentPoint() {
         if (currentEditingIndex === -1) return;
-        if (groundTruthWaypoints.length <= 2) {
-            alert("Cannot delete: need at least 2 waypoints to keep a valid trajectory.");
-            closeModal();
-            return;
-        }
+        if (groundTruthWaypoints.length <= 2) { alert("Need at least 2 waypoints."); closeModal(); return; }
         groundTruthWaypoints.splice(currentEditingIndex, 1);
         sortAndFixTimes(groundTruthWaypoints);
         updateUIAndDraw();
-        document.getElementById('statusMsg').innerHTML = `🗑️ Deleted waypoint. ${groundTruthWaypoints.length} points remaining.`;
+        document.getElementById('statusMsg').innerHTML = `🗑️ Deleted waypoint.`;
         closeModal();
     }
     
-    // ----- CANVAS CLICK: DETECT WAYPOINT (edit modal) OR add new if empty space -----
     function handleCanvasClick(e) {
         const rect = canvas.getBoundingClientRect();
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
-        
         let clientX, clientY;
-        if (e.touches) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-            e.preventDefault();
-        } else {
-            clientX = e.clientX;
-            clientY = e.clientY;
-        }
-        
+        if (e.touches) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; e.preventDefault(); }
+        else { clientX = e.clientX; clientY = e.clientY; }
         let canvasX = (clientX - rect.left) * scaleX;
         let canvasY = (clientY - rect.top) * scaleY;
         canvasX = Math.min(Math.max(canvasX, 5), canvas.width - 5);
         canvasY = Math.min(Math.max(canvasY, 5), canvas.height - 5);
-        
-        // Check if click hits any ground truth waypoint (radius 15px)
         let hitIndex = -1;
         for (let i = 0; i < groundTruthWaypoints.length; i++) {
             const wp = groundTruthWaypoints[i];
-            const dx = wp.x - canvasX;
-            const dy = wp.y - canvasY;
-            if (Math.hypot(dx, dy) < 15) {
-                hitIndex = i;
-                break;
-            }
+            if (Math.hypot(wp.x - canvasX, wp.y - canvasY) < 15) { hitIndex = i; break; }
         }
-        
-        if (hitIndex !== -1) {
-            // Open edit modal for this waypoint
-            openEditModal(hitIndex);
-        } else {
-            // Add new waypoint (tap on empty area)
-            if (groundTruthWaypoints.length === 0) {
-                groundTruthWaypoints.push({ x: canvasX, y: canvasY, t: 0 });
-                recomputeTimes(groundTruthWaypoints);
-            } else {
-                // Insert new point: we'll add then sort by accumulated distance from first point to maintain path continuity
-                groundTruthWaypoints.push({ x: canvasX, y: canvasY, t: 0 });
-                const firstPt = groundTruthWaypoints[0];
-                groundTruthWaypoints.sort((a,b) => {
-                    const da = Math.hypot(a.x - firstPt.x, a.y - firstPt.y);
-                    const db = Math.hypot(b.x - firstPt.x, b.y - firstPt.y);
-                    return da - db;
-                });
-                recomputeTimes(groundTruthWaypoints);
-            }
+        if (hitIndex !== -1) openEditModal(hitIndex);
+        else {
+            groundTruthWaypoints.push({ x: canvasX, y: canvasY, t: 0 });
+            const firstPt = groundTruthWaypoints[0];
+            groundTruthWaypoints.sort((a,b) => Math.hypot(a.x-firstPt.x, a.y-firstPt.y) - Math.hypot(b.x-firstPt.x, b.y-firstPt.y));
+            recomputeTimes(groundTruthWaypoints);
             updateUIAndDraw();
-            document.getElementById('statusMsg').innerHTML = `➕ New waypoint added at (${Math.round(canvasX)}, ${Math.round(canvasY)}). Click point to edit.`;
+            document.getElementById('statusMsg').innerHTML = `➕ Added waypoint at (${Math.round(canvasX)}, ${Math.round(canvasY)})`;
         }
     }
     
-    // ----- NOISE GENERATION -----
-    function gaussianRandom(mean=0, stdev=28) {
-        let u = 1 - Math.random();
-        let v = Math.random();
-        let z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-        return z * stdev + mean;
-    }
-    
-    function generateNoiseTrajectory(maxTraj=5, noiseStd=28) {
-        if (groundTruthWaypoints.length < 2) {
-            alert("Need at least 2 waypoints first.");
-            return;
-        }
-        noisyTrajectories = [];
-        const base = groundTruthWaypoints;
-        const num = Math.floor(Math.random() * maxTraj) + 1;
-        for (let n=0; n<num; n++) {
-            let newTraj = [];
-            for (let i=0; i<base.length; i++) {
-                const cp = base[i];
-                if (i===0 || i===base.length-1) {
-                    newTraj.push({ x: cp.x, y: cp.y, t: cp.t });
-                } else {
-                    let nx = cp.x + gaussianRandom(0, noiseStd);
-                    let ny = cp.y + gaussianRandom(0, noiseStd);
-                    let nt = cp.t + gaussianRandom(0, 0.6);
-                    newTraj.push({ x: nx, y: ny, t: Math.max(cp.t-0.5, nt) });
-                }
-            }
-            newTraj.sort((a,b)=>a.t-b.t);
-            noisyTrajectories.push(newTraj);
-        }
-        updateUIAndDraw();
-        document.getElementById('statusMsg').innerHTML = `🎲 Added ${num} noisy trajectories.`;
-    }
-    
-    function clearNoise() { noisyTrajectories = []; updateUIAndDraw(); document.getElementById('statusMsg').innerHTML = `🧹 Noisy trajectories cleared.`; }
-    function clearPred() { predictionTrajectory = null; updateUIAndDraw(); document.getElementById('statusMsg').innerHTML = `❌ Prediction cleared.`; }
-    
-    // Save/Load JSON
+    // Save/Load
     function saveToJSON() {
         if (!groundTruthWaypoints.length) { alert("No waypoints"); return; }
         const data = { ground_truth: groundTruthWaypoints, noisy_trajectories: noisyTrajectories, timestamp: new Date().toISOString() };
@@ -767,9 +783,7 @@
         const a = document.createElement('a');
         a.href = url;
         a.download = `trajectory_${Date.now()}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
         document.getElementById('statusMsg').innerHTML = `💾 Saved to JSON`;
     }
@@ -785,10 +799,7 @@
                 if (data.ground_truth && Array.isArray(data.ground_truth)) {
                     groundTruthWaypoints = data.ground_truth.map(p => ({ x: p.x, y: p.y, t: p.t }));
                     sortAndFixTimes(groundTruthWaypoints);
-                } else if (data.waypoints) {
-                    groundTruthWaypoints = data.waypoints.map(p => ({ x: p.x, y: p.y, t: p.t }));
-                    sortAndFixTimes(groundTruthWaypoints);
-                } else throw new Error("No ground_truth array");
+                } else throw new Error("No ground_truth");
                 noisyTrajectories = data.noisy_trajectories || [];
                 predictionTrajectory = null;
                 updateUIAndDraw();
@@ -807,47 +818,30 @@
         reader.onload = (e) => {
             try {
                 const data = JSON.parse(e.target.result);
-                let predArr = null;
-                if (data.prediction) predArr = data.prediction;
-                else if (data.ground_truth) predArr = data.ground_truth;
-                else if (Array.isArray(data)) predArr = data;
-                else if (data.data && Array.isArray(data.data)) predArr = data.data;
-                else for (let key in data) { if (Array.isArray(data[key]) && data[key][0]?.x) { predArr = data[key]; break; } }
-                if (!predArr) throw new Error("No valid prediction array");
+                let predArr = data.prediction || data.ground_truth || (Array.isArray(data) ? data : null);
+                if (!predArr) throw new Error("No prediction array");
                 predictionTrajectory = predArr.map(p => ({ x: parseFloat(p.x), y: parseFloat(p.y), t: parseFloat(p.t) }));
                 predictionTrajectory.sort((a,b)=>a.t-b.t);
                 updateUIAndDraw();
                 document.getElementById('statusMsg').innerHTML = `📈 Prediction loaded (${predictionTrajectory.length} pts)`;
-            } catch(err) { alert("Prediction error: " + err.message); }
+            } catch(err) { alert("Pred error: " + err.message); }
         };
         reader.readAsText(file);
         event.target.value = '';
     }
     
-    // Button actions
     function addPointButton() {
         if (groundTruthWaypoints.length === 0) groundTruthWaypoints.push({ x: 200, y: 300, t: 0 });
-        else {
-            const last = groundTruthWaypoints[groundTruthWaypoints.length-1];
-            let newX = last.x + 45;
-            let newY = last.y + (Math.random() * 30 - 15);
-            groundTruthWaypoints.push({ x: newX, y: newY, t: last.t + 1.5 });
+        else { const last = groundTruthWaypoints[groundTruthWaypoints.length-1];
+            groundTruthWaypoints.push({ x: last.x + 45, y: last.y + (Math.random() * 30 - 15), t: last.t + 1.5 });
         }
         sortAndFixTimes(groundTruthWaypoints);
         updateUIAndDraw();
-        document.getElementById('statusMsg').innerHTML = `➕ Added point via button. Click to edit.`;
     }
-    function removeLast() {
-        if (groundTruthWaypoints.length <= 2) { alert("Keep at least 2 waypoints."); return; }
-        groundTruthWaypoints.pop();
-        sortAndFixTimes(groundTruthWaypoints);
-        updateUIAndDraw();
-        document.getElementById('statusMsg').innerHTML = `➖ Removed last point.`;
-    }
+    function removeLast() { if (groundTruthWaypoints.length <= 2) { alert("Keep at least 2"); return; } groundTruthWaypoints.pop(); sortAndFixTimes(groundTruthWaypoints); updateUIAndDraw(); }
     function resetAll() { initDefault(); }
     function updateEpsilon() { EPS_BIN = parseFloat(document.getElementById('epsilonInput').value); drawCanvas(); }
     
-    // Event listeners
     function attachEvents() {
         canvas.addEventListener('click', handleCanvasClick);
         canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleCanvasClick(e); });
@@ -858,14 +852,13 @@
         document.getElementById('addBtn').onclick = addPointButton;
         document.getElementById('removeBtn').onclick = removeLast;
         document.getElementById('resetBtn').onclick = resetAll;
-        document.getElementById('noiseBtn').onclick = () => generateNoiseTrajectory(5, 28);
+        document.getElementById('noiseBtn').onclick = addGaussianNoise;
+        document.getElementById('poissonBurstBtn').onclick = addPoissonBurstNoise;
         document.getElementById('clearNoiseBtn').onclick = clearNoise;
         document.getElementById('clearPredBtn').onclick = clearPred;
         document.getElementById('saveBtn').onclick = saveToJSON;
         document.getElementById('epsilonInput').onchange = updateEpsilon;
         document.getElementById('randomTrajBtn').onclick = generateRandomTrajectory;
-        
-        // Modal buttons
         document.getElementById('modalSaveBtn').onclick = saveModalChanges;
         document.getElementById('modalCancelBtn').onclick = closeModal;
         document.getElementById('modalDeleteBtn').onclick = deleteCurrentPoint;
