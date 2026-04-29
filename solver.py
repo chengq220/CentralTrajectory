@@ -55,7 +55,9 @@ class Solvers:
         traj_pred = []
         x,y,t = self.gt[0]
         traj_pred.append([float(x), float(y), float(t)])
-        for idx in range(self.gt_bins.shape[0]):
+        num_bins = min(self.gt_bins.shape[0], 
+                min([len(bins) for bins in self.noise_bins]) if self.noise_bins else 0)
+        for idx in range(num_bins):
             hull = self.__computeConvexHull(idx)
             pred_x = 0 
             pred_y = 0
@@ -78,9 +80,12 @@ class Solvers:
         pred_traj = []
         x,y,t = self.gt[0]
         pred_traj.append([float(x), float(y), float(t)])
+
+        num_bins = min(self.gt_bins.shape[0], 
+                min([len(bins) for bins in self.noise_bins]) if self.noise_bins else 0)
         
         # for each time bin, compute the average of the points 
-        for idx in range(self.gt_bins.shape[0]):
+        for idx in range(num_bins):
             count = 0
             x_avg, y_avg = 0, 0
             cur_noise_bins = [self.noise_bins[noise_idx][idx] for noise_idx in range(len(self.noise_bins))]
