@@ -1,6 +1,5 @@
-import json
 import numpy as np
-from scipy.spatial import ConvexHull, convex_hull_plot_2d
+from scipy.spatial import ConvexHull
 from utils import *
 
 """
@@ -9,6 +8,8 @@ Central Trajectory Solver
 class Solvers:
     def __init__(self, path, bin_size = 1):
         self.gt, self.noise_traj = getData(path)
+        assert len(self.gt) > 0, "Ground truth trajectory cannot be empty"
+        assert len(self.noise_traj) > 0, "Noise trajectory cannot be empty"
         self.gt_bins = create_bins(self.gt, bin_size)
         self.interpolated_gt = self.__interpolate_gt()
         self.noise_bins = [create_bins(self.noise_traj[i], bin_size) for i in range(self.noise_traj.shape[0])]        
@@ -110,14 +111,29 @@ class Solvers:
     def computeMetrics(self, pred):
         return metric(self.interpolated_gt, pred)
 
-if __name__ == "__main__":
-    solver = Solvers(path="example/trajectory_nonoise.json")
+# if __name__ == "__main__":
 
-    pred = solver.ComputeGaussianTrajectory()
-    save_pred(pred)
-    print(solver.computeMetrics(pred))
+#     from glob import glob 
 
-    pred = solver.computeConvexHullTrajectory()
-    # print(pred)
-    save_pred(pred, name="pred_CH")
-    print(solver.computeMetrics(pred))
+#     file_path = glob("example/noise/*.json")
+#     num_files = len(file_path)
+
+#     gauss = np.zeros(4)
+#     hull = np.zeros(4)
+
+#     for f in file_path: 
+#         print(f)
+#         solver = Solvers(path=f)
+
+#         pred = solver.ComputeGaussianTrajectory()
+#         # save_pred(pred)
+#         gauss_metric = solver.computeMetrics(pred)
+#         gauss += gauss_metric
+
+#         pred = solver.computeConvexHullTrajectory()
+#         # save_pred(pred, name="pred_CH")
+#         hull_metric = solver.computeMetrics(pred)
+#         hull += hull_metric
+
+#     print("Gaussian Trajectory Average Metrics: ", gauss/num_files)
+#     print("Convex Hull Trajectory Average Metrics: ", hull/num_files)

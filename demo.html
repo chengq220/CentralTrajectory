@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Trajectory Editor: Click to Edit Waypoint</title>
+    <title>Trajectory Editor: Click to Edit Waypoint + Random Gen</title>
     <style>
         * {
             margin: 0;
@@ -193,6 +193,23 @@
             border-radius: 20px;
             font-size: 10px;
         }
+        .random-param-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            background: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            flex-wrap: wrap;
+        }
+        .random-param-row label {
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .random-param-row input {
+            width: 55px;
+        }
     </style>
 </head>
 <body>
@@ -215,6 +232,16 @@
             <button id="addBtn">➕ Add Point</button>
             <button id="removeBtn">➖ Remove Last</button>
             <button id="resetBtn">🔄 Reset</button>
+        </div>
+
+        <!-- Random Trajectory Generator Section -->
+        <div class="random-param-row">
+            <label>🎲 Random:</label>
+            <input type="number" id="randomPointsNum" value="5" min="3" max="12" step="1" style="width: 48px;">
+            <label>pts</label>
+            <input type="number" id="randomSpread" value="60" min="20" max="150" step="5" style="width: 55px;">
+            <label>spread</label>
+            <button id="randomTrajBtn" style="background:#e3f2fd;">✨ Random Traj</button>
         </div>
 
         <div class="param-group">
@@ -301,7 +328,7 @@
             const prev = waypoints[i-1];
             const curr = waypoints[i];
             const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y);
-            const dt = Math.max(0.3, dist / 45);  // smooth time progression
+            const dt = Math.max(0.3, dist / 42);  // smooth time progression
             curr.t = prev.t + dt;
         }
     }
@@ -325,6 +352,87 @@
         predictionTrajectory = null;
         updateUIAndDraw();
         document.getElementById('statusMsg').innerHTML = `✨ Default trajectory. Click any blue point to edit.`;
+    }
+    
+    // RANDOM TRAJECTORY GENERATOR (organic smooth path with random turns)
+    function generateRandomTrajectory() {
+        const numPoints = parseInt(document.getElementById('randomPointsNum').value, 10);
+        let spread = parseFloat(document.getElementById('randomSpread').value);
+        spread = Math.min(Math.max(spread, 25), 200);
+        
+        if (isNaN(numPoints) || numPoints < 2) {
+            alert("At least 2 points required for trajectory.");
+            return;
+        }
+        const effectivePoints = Math.min(Math.max(numPoints, 2), 15);
+        
+        // Canvas safe margins
+        const margin = 40;
+        const minX = margin;
+        const maxX = canvas.width - margin;
+        const minY = margin;
+        const maxY = canvas.height - margin;
+        
+        // generate random start point
+        let startX = minX + Math.random() * (maxX - minX);
+        let startY = minY + Math.random() * (maxY - minY);
+        
+        let waypoints = [{ x: startX, y: startY, t: 0 }];
+        
+        let prevAngle = Math.random() * Math.PI * 2;
+        let prevX = startX, prevY = startY;
+        
+        for (let i = 1; i < effectivePoints; i++) {
+            // Random walk with angle smoothing: avoid wild swings but allow organic curves
+            let angleChange = (Math.random() - 0.5) * 1.4; // -0.7 to +0.7 rad (~ +/-40 deg)
+            let newAngle = prevAngle + angleChange;
+            
+            // Add occasional large variation maybe 10% chance of stronger turn
+            if (Math.random() < 0.2) {
+                newAngle += (Math.random() - 0.5) * 1.2;
+            }
+            
+            let stepSize = spread * (0.6 + Math.random() * 0.9); // variable step
+            // limit step based on bounds to avoid rush out
+            let dx = Math.cos(newAngle) * stepSize;
+            let dy = Math.sin(newAngle) * stepSize;
+            
+            let newX = prevX + dx;
+            let newY = prevY + dy;
+            
+            // Bounce/clamp with slight inward reflection to keep inside bounds
+            if (newX < minX) { newX = minX + (minX - newX) * 0.6; newAngle = Math.PI - newAngle; }
+            if (newX > maxX) { newX = maxX - (newX - maxX) * 0.6; newAngle = Math.PI - newAngle; }
+            if (newY < minY) { newY = minY + (minY - newY) * 0.6; newAngle = -newAngle; }
+            if (newY > maxY) { newY = maxY - (newY - maxY) * 0.6; newAngle = -newAngle; }
+            
+            newX = Math.min(maxX, Math.max(minX, newX));
+            newY = Math.min(maxY, Math.max(minY, newY));
+            
+            waypoints.push({ x: newX, y: newY, t: 0 });
+            prevX = newX;
+            prevY = newY;
+            prevAngle = newAngle;
+        }
+        
+        // final smoothing: recompute times, ensure spatial coherence is fine, but also we can slightly jitter positions for more realism? optional.
+        recomputeTimes(waypoints);
+        // optional tiny gaussian jitter (10% of spread) to make it more organic
+        for (let i = 1; i < waypoints.length - 1; i++) {
+            if (Math.random() < 0.5) {
+                waypoints[i].x += (Math.random() - 0.5) * 12;
+                waypoints[i].y += (Math.random() - 0.5) * 12;
+                waypoints[i].x = Math.min(maxX, Math.max(minX, waypoints[i].x));
+                waypoints[i].y = Math.min(maxY, Math.max(minY, waypoints[i].y));
+            }
+        }
+        recomputeTimes(waypoints);
+        
+        groundTruthWaypoints = waypoints;
+        noisyTrajectories = [];
+        predictionTrajectory = null;
+        updateUIAndDraw();
+        document.getElementById('statusMsg').innerHTML = `🎲 Random trajectory generated with ${groundTruthWaypoints.length} waypoints. Click points to edit.`;
     }
     
     function updateUIAndDraw() {
@@ -373,6 +481,7 @@
         ctx.lineWidth = 1;
         ctx.moveTo(0, canvas.height/2);
         ctx.lineTo(canvas.width, canvas.height/2);
+        ctx.stroke();
         ctx.moveTo(canvas.width/2, 0);
         ctx.lineTo(canvas.width/2, canvas.height);
         ctx.stroke();
@@ -493,7 +602,6 @@
             ctx.fillStyle = '#0a2a66';
             ctx.font = 'bold 14px monospace';
             ctx.fillText(i, wp.x - 4, wp.y - 7);
-            // subtle glow effect on hover? just visual
         }
         ctx.setLineDash([]);
     }
@@ -595,9 +703,8 @@
                 groundTruthWaypoints.push({ x: canvasX, y: canvasY, t: 0 });
                 recomputeTimes(groundTruthWaypoints);
             } else {
-                // Insert new point: we'll add then sort by distance from start to preserve spatial order.
+                // Insert new point: we'll add then sort by accumulated distance from first point to maintain path continuity
                 groundTruthWaypoints.push({ x: canvasX, y: canvasY, t: 0 });
-                // sort by approximate distance from first point to maintain path continuity
                 const firstPt = groundTruthWaypoints[0];
                 groundTruthWaypoints.sort((a,b) => {
                     const da = Math.hypot(a.x - firstPt.x, a.y - firstPt.y);
@@ -608,11 +715,6 @@
             }
             updateUIAndDraw();
             document.getElementById('statusMsg').innerHTML = `➕ New waypoint added at (${Math.round(canvasX)}, ${Math.round(canvasY)}). Click point to edit.`;
-            setTimeout(() => {
-                if (document.getElementById('statusMsg').innerHTML.includes("New waypoint")) {
-                    updateUIAndDraw();
-                }
-            }, 2000);
         }
     }
     
@@ -761,6 +863,7 @@
         document.getElementById('clearPredBtn').onclick = clearPred;
         document.getElementById('saveBtn').onclick = saveToJSON;
         document.getElementById('epsilonInput').onchange = updateEpsilon;
+        document.getElementById('randomTrajBtn').onclick = generateRandomTrajectory;
         
         // Modal buttons
         document.getElementById('modalSaveBtn').onclick = saveModalChanges;

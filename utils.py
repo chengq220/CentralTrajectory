@@ -90,7 +90,7 @@ def metric(gt, pred):
     rel_error_x /= len(gt)
     rel_error_y /= len(gt)
 
-    return [abs_error_x, abs_error_y, rel_error_x, rel_error_y]
+    return np.array([abs_error_x, abs_error_y, rel_error_x, rel_error_y])
 
 """
 Save trajectories
