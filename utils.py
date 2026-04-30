@@ -99,7 +99,7 @@ def save_pred(pred, name="pred"):
     pred_list = []
     for x, y, t in pred:
         pred_list.append({'x': x, 'y': y, 't': t})
-    output = {name: pred_list}
+    output = {"prediction": pred_list}
     
     filename = f"{name}.json"
     with open(filename, 'w') as file:
