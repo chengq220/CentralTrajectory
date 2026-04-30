@@ -47,6 +47,7 @@ def lin_interpolation(t_0, t_1, x_0, x_1, y_0, y_1, t):
     y_out = y_1 + m_y * (t_alter - t_1)
 
     return [x_out, y_out, t]
+
 """
 Create a data structure O(N) to enable 
 O(1) query for where interval does the bin belong to

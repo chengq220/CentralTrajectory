@@ -7,15 +7,17 @@ from utils import save_pred
 Central Trajectory Solver
 """
 class Solvers:
-    def __init__(self, path, bin_size = 1):
+    def __init__(self, path, bin_size = 1, interpolate = "linear"):
         self.gt, self.noise_traj = getData(path)
         assert len(self.gt) > 0, "Ground truth trajectory cannot be empty"
         assert len(self.noise_traj) > 0, "Noise trajectory cannot be empty"
+        if interpolate not in ["linear", "cubic"]:
+            raise ValueError("Interpolation method must be 'linear' or 'cubic'")
         self.gt_bins = create_bins(self.gt, bin_size)
-        self.interpolated_gt = self.__interpolate_gt()
+        self.interpolated_gt = self.__interpolate_gt(interpolate)
         self.noise_bins = [create_bins(self.noise_traj[i], bin_size) for i in range(self.noise_traj.shape[0])]        
 
-    def __interpolate_gt(self):
+    def __interpolate_gt(self, interpolate):
         interpolated_gt = []
         for idx in range(self.gt_bins.shape[0]):
             bin_start, bin_end, int_start, int_end = self.gt_bins[idx]
