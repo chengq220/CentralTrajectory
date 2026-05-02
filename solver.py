@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.spatial import ConvexHull
+from scipy.interpolate import CubicSpline
 from utils import *
 from utils import save_pred
 
@@ -13,27 +14,45 @@ class Solvers:
         assert len(self.noise_traj) > 0, "Noise trajectory cannot be empty"
         if interpolate not in ["linear", "cubic"]:
             raise ValueError("Interpolation method must be 'linear' or 'cubic'")
+        self.interpolate_type = interpolate
+        self.interpolate_func = None
+        if self.interpolate_type == "cubic":
+            self.interpolate_func = []
+            for nt in range(self.noise_traj.shape[0]):
+                cur_noise = self.noise_traj[nt]
+                cubicspline_x = CubicSpline(cur_noise[:, 2], cur_noise[:, 0], bc_type='natural')
+                cubicspline_y = CubicSpline(cur_noise[:, 2], cur_noise[:, 1], bc_type='natural')
+                self.interpolate_func.append((cubicspline_x, cubicspline_y))
         self.gt_bins = create_bins(self.gt, bin_size)
         self.interpolated_gt = self.__interpolate_gt(interpolate)
         self.noise_bins = [create_bins(self.noise_traj[i], bin_size) for i in range(self.noise_traj.shape[0])]        
 
     def __interpolate_gt(self, interpolate):
         interpolated_gt = []
-        for idx in range(self.gt_bins.shape[0]):
-            bin_start, bin_end, int_start, int_end = self.gt_bins[idx]
-            t = (bin_start + bin_end) / 2
-            x0, y0 = self.gt[int_start][0], self.gt[int_start][1]
-            x1, y1 = self.gt[int_end][0], self.gt[int_end][1]
-            t0, t1 = self.gt[int_start][2], self.gt[int_end][2]
-            interpolate_gt = lin_interpolation(t0, t1, x0, x1, y0, y1, t)
-            interpolated_gt.append(interpolate_gt)
+        if interpolate == "linear":
+            for idx in range(self.gt_bins.shape[0]):
+                bin_start, bin_end, int_start, int_end = self.gt_bins[idx]
+                t = (bin_start + bin_end) / 2
+                x0, y0 = self.gt[int_start][0], self.gt[int_start][1]
+                x1, y1 = self.gt[int_end][0], self.gt[int_end][1]
+                t0, t1 = self.gt[int_start][2], self.gt[int_end][2]
+                interpolate_gt = lin_interpolation(t0, t1, x0, x1, y0, y1, t)
+                interpolated_gt.append(interpolate_gt)
+        else:
+            cubicspline_x = CubicSpline(self.gt[:, 2], self.gt[:, 0], bc_type='natural')
+            cubicspline_y = CubicSpline(self.gt[:, 2], self.gt[:, 1], bc_type='natural')
+            for idx in range(self.gt_bins.shape[0]):
+                bin_start, bin_end, int_start, int_end = self.gt_bins[idx]
+                t = (bin_start + bin_end) / 2
+                x, y = cubicspline_x(t), cubicspline_y(t)
+                interpolated_gt.append([x,y,t])
         return interpolated_gt
 
     """
     Compute convex hull given a time bin and the points belonging to the time bin
     """
     def __computeConvexHull(self, bin_idx, num_points=5):
-        # interpolate the points in the bin at 3 points, the two end points of the bin and the middle point
+        # interpolate using unifromly sampled points within the time bin and compute the convex hull of the interpolated points
         bin_start, bin_end, int_start, int_end = self.gt_bins[bin_idx]
         bin_pts = []
         cur_noise_bins = [self.noise_bins[noise_idx][bin_idx] for noise_idx in range(len(self.noise_bins))]
@@ -45,7 +64,11 @@ class Solvers:
             noise_t0, noise_t1 = cur_noise[int_start][2], cur_noise[int_end][2]
             for _ in range(num_points):
                 t = np.random.uniform(bin_start, bin_end)
-                interpolate_noise_t = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
+                if self.interpolate_type == "cubic":
+                    cubic_x, cubic_y = self.interpolate_func[nt]
+                    interpolate_noise_t = [cubic_x(t), cubic_y(t)]
+                else:
+                    interpolate_noise_t = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
                 bin_pts.append([interpolate_noise_t[0], interpolate_noise_t[1]])
         bin_pts = np.array(bin_pts)
         hull = ConvexHull(bin_pts, qhull_options="QJ")
@@ -60,6 +83,7 @@ class Solvers:
         traj_pred.append([float(x), float(y), float(t)])
         num_bins = min(self.gt_bins.shape[0], 
                 min([len(bins) for bins in self.noise_bins]) if self.noise_bins else 0)
+        
         for idx in range(num_bins):
             hull = self.__computeConvexHull(idx)
             pred_x = 0 
@@ -81,7 +105,7 @@ class Solvers:
     """
     def ComputeGaussianTrajectory(self):
         pred_traj = []
-        x,y,t = self.gt[0]
+        x, y, t = self.gt[0]
         pred_traj.append([float(x), float(y), float(t)])
 
         num_bins = min(self.gt_bins.shape[0], 
@@ -98,10 +122,14 @@ class Solvers:
                 cur_noise = self.noise_traj[nt]
                 bin_start, bin_end, int_start, int_end = cur_noise_bins[nt]
                 t = (bin_start + bin_end) / 2
-                noise_x0, noise_y0 = cur_noise[int_start][0], cur_noise[int_start][1]
-                noise_x1, noise_y1 = cur_noise[int_end][0], cur_noise[int_end][1]
-                noise_t0, noise_t1 = cur_noise[int_start][2], cur_noise[int_end][2]
-                interpolate_noise = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
+                if self.interpolate_type == "cubic":
+                    cubic_x, cubic_y = self.interpolate_func[nt]
+                    interpolate_noise = [cubic_x(t), cubic_y(t)]
+                else:
+                    noise_x0, noise_y0 = cur_noise[int_start][0], cur_noise[int_start][1]
+                    noise_x1, noise_y1 = cur_noise[int_end][0], cur_noise[int_end][1]
+                    noise_t0, noise_t1 = cur_noise[int_start][2], cur_noise[int_end][2]
+                    interpolate_noise = lin_interpolation(noise_t0, noise_t1, noise_x0, noise_x1, noise_y0, noise_y1, t)
                 x_avg += interpolate_noise[0]
                 y_avg += interpolate_noise[1]
                 count += 1
@@ -109,7 +137,7 @@ class Solvers:
             x_avg /= count
             y_avg /= count
             pred_traj.append([float(x_avg), float(y_avg), float(t)])
-        x,y,t = self.gt[-1]
+        x, y, t = self.gt[-1]
         pred_traj.append([float(x), float(y), float(t)])
         return pred_traj
 
